@@ -58,7 +58,7 @@
 (defconst smart-mode-dialect-regexs
   `(,(format "(\\s-*\\(?:plain\\|docksh\\)\\s-+%s\\s-*)"
              (regexp-opt smart-mode-dialects t))
-    ,(format "(\\s-*\\(%s\\)\\s-+.*?)"
+    ,(format "(\\s-*%s.*?)"
              (regexp-opt smart-mode-dialect-interpreters t)))
   "Supported dialects regexps by smart.")
 
@@ -207,22 +207,30 @@
 
 ;;---- VARS --------------------------------------------------------------
 
+;; The `font-lock-beg' and `font-lock-end' is actually private to
+;; font-lock.el (see `font-lock-default-fontify-region' for details).
 (defvar font-lock-beg)
 (defvar font-lock-end)
 
+(defvar smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 (defvar smart-mode-debug-message-on t)
+
+(defvar smart-mode-inhibit-fontification nil)
 (defvar smart-mode-change-beg nil)
 (defvar smart-mode-change-end nil)
-(defvar smart-mode-content-type "")
-(defvar smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
-(defvar smart-mode-inhibit-fontification nil)
-
-(defvar smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
-(defvar smart-mode-recipe-face 'smart-mode-recipe-face)
 
 (defvar smart-recipe-overlays nil
   "The smart-mode recipe overlays used in the current buffer.")
+
+(make-variable-buffer-local 'font-lock-beg)
+(make-variable-buffer-local 'font-lock-end)
+(make-variable-buffer-local 'smart-mode-change-beg)
+(make-variable-buffer-local 'smart-mode-change-end)
+(make-variable-buffer-local 'smart-mode-inhibit-fontification)
 (make-variable-buffer-local 'smart-recipe-overlays)
+
+(defvar smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
+(defvar smart-mode-recipe-face 'smart-mode-recipe-face)
 
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar smart-mode-scan-properties
@@ -299,7 +307,7 @@
            ;;(put-text-property )
            (let ((pos (- beg 1)))
              (when (< (point-min) pos)
-               (smart-mode-debug-message "scan: recipe(%S) recipe-dialect(%S)"
+               (smart-mode-debug-message "scan-region: recipe(%S) recipe-dialect(%S)"
                                          (get-text-property pos 'recipe)
                                          (get-text-property pos 'recipe-dialect))
                (setq dialect (get-text-property pos 'recipe-dialect))))
@@ -564,26 +572,23 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-scan-region (point-min) (point-max)))
 
 (defun smart-mode-extend-region ()
-  (smart-mode-debug-message "extend-region: change-beg(%S) change-end(%S)" 
-                            smart-mode-change-beg smart-mode-change-end)
+  (smart-mode-debug-message "extend-region: fl-beg(%S) fl-end(%S) change-beg(%S) change-end(%S)" 
+                            font-lock-beg font-lock-end smart-mode-change-beg smart-mode-change-end)
   (unless smart-mode-inhibit-fontification
     (when (or (null smart-mode-change-beg) (< font-lock-beg smart-mode-change-beg))
-      ;;(smart-mode-debug-message "font-lock-beg(%S) < smart-mode-change-beg(%S)" font-lock-beg smart-mode-change-beg)
       (setq smart-mode-change-beg font-lock-beg))
     (when (or (null smart-mode-change-end) (> font-lock-end smart-mode-change-end))
-      ;;(smart-mode-debug-message "font-lock-end(%S) > smart-mode-change-end(%S)" font-lock-end smart-mode-change-end)
       (setq smart-mode-change-end font-lock-end))
     (let ((region (smart-mode-propertize smart-mode-change-beg smart-mode-change-end)))
       (when region
-        ;;(smart-mode-debug-message "region: %S" region)
+        (smart-mode-debug-message "extend-region: propertized(%S)" region)
         (setq font-lock-beg (car region)
               font-lock-end (cdr region))))))
 
 (defun smart-mode-propertize (&optional beg end)
   (unless beg (setq beg smart-mode-change-beg))
   (unless end (setq end smart-mode-change-end))
-  (smart-mode-debug-message "propertize: beg(%S) end(%S) dialect(%s)" 
-                            beg end (get-text-property beg 'recipe-dialect))
+  (smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
   (when (and end (> end (point-max)))
     (setq end (point-max)))
   (setq smart-mode-change-beg nil
@@ -593,10 +598,34 @@ Returns `t' if there's a next dependency line, or nil."
    (t (smart-mode-invalidate-region beg end))))
 
 (defun smart-mode-invalidate-region (beg end)
+  ;; TODO: decide invalidate range (beg, end) according to the dialect
+  (let ((dialect (get-text-property beg 'recipe-dialect)) (func1) (func2))
+    (if (or (null dialect) (string-equal dialect "none")) 
+        (setq dialect "default"))
+    (setq func1 (intern-soft (format "smart-mode-invalidate-%s-region-beginning-position" dialect)))
+    (when (and func1 (functionp func1))
+      (setq func2 (intern-soft (format "smart-mode-invalidate-%s-region-end-position" dialect)))
+      (if (and func2 (functionp func2))
+          (setq beg (funcall func1 beg)
+                end (funcall func2 end)))))
   (smart-mode-debug-message "invalidate-region: beg(%S) end(%S)" beg end)
-  (smart-mode-scan-region beg end))
+  (if (< beg end) (smart-mode-scan-region beg end)))
 
-(defun smart-mode-fontify-region (beg end keywords)
+(defun smart-mode-invalidate-default-region-beginning-position (pos)
+  (save-excursion
+    (goto-char pos)
+    (smart-mode-beginning-of-line)
+    (setq pos (point)))
+  pos)
+
+(defun smart-mode-invalidate-default-region-end-position (pos)
+  (save-excursion
+    (goto-char pos)
+    (smart-mode-end-of-line)
+    (setq pos (point)))
+  pos)
+
+(defun smart-mode-fontify-region (beg end keywords) ;; see `font-lock-default-fontify-region'
   (smart-mode-debug-message "fontify-region: beg(%S) end(%S)" beg end)
   (save-excursion
     ;;(member smart-mode-engine '("archibus" "asp" "template-toolkit"))
@@ -606,12 +635,16 @@ Returns `t' if there's a next dependency line, or nil."
           (font-lock-keywords-case-fold-search t)
           (font-lock-extend-region-functions nil))
       (when (listp font-lock-keywords)
-        (smart-mode-debug-message "fontified: %S" (buffer-substring beg end))
+        (smart-mode-debug-message "fontify-region: fontified(%s)" (buffer-substring beg end))
+        ;; calls `font-lock-fontify-region-function'
         (font-lock-fontify-region beg end)))))
 
-(defun smart-mode-unfontify-region (beg end) ;; (font-lock-unfontify-region beg end)
-  (smart-mode-debug-message "unfontify-region: beg(%S) end(%S)" beg end)
-  )
+;; The `smart-mode-unfontify-region' is called each time the buffer
+;; is extended (after `smart-mode-extend-region'). We just ignore it
+;; by doing nothing. See `font-lock-unfontify-region'.
+(defun smart-mode-unfontify-region (beg end)
+  ;;(smart-mode-debug-message "unfontify-region: beg(%S) end(%S)" beg end)
+  nil)
 
 (defun smart-mode-comment-region (beg end &optional arg)
   (smart-mode-debug-message "commeng-region: beg(%S) end(%S) arg(%S)" beg end arg))
@@ -676,8 +709,8 @@ Returns `t' if there's a next dependency line, or nil."
         uncomment-region-function 'smart-mode-comment-uncomment-region
         indent-line-function 'smart-mode-indent-line)
 
-  (setq smart-mode-change-beg (point-min)
-        smart-mode-change-end (point-max))
+  ;;(setq smart-mode-change-beg (point-min)
+  ;;      smart-mode-change-end (point-max))
 
   ;;(when (> (point-max) 256000)
   ;;  (smart-mode-highlight-buffer))
@@ -701,8 +734,9 @@ Returns `t' if there's a next dependency line, or nil."
     (font-lock-fontify-region (point-min) (point-max))))
 
 (defun smart-mode-font-lock-highlight (limit)
-  (smart-mode-debug-message "font-lock-highlight: point(%S) limit(%S) change-beg(%S) change-end(%S)"
-                            (point) limit smart-mode-change-beg smart-mode-change-end)
+  (smart-mode-debug-message "font-lock-highlight: point(%S) limit(%S) fl-beg(%S) f-end(%S) change-beg(%S) change-end(%S)"
+                            (point) limit font-lock-beg font-lock-end
+                            smart-mode-change-beg smart-mode-change-end)
   (unless smart-mode-inhibit-fontification
     (smart-mode-highlight-region (point) limit))
   nil)
@@ -718,20 +752,20 @@ Returns `t' if there's a next dependency line, or nil."
                (inhibit-quit t) (pos beg) (bor))
            (remove-list-of-text-properties beg end '(font-lock-face face))
            (goto-char beg) ;; start from the beginning
-           (while (and (smart-mode-next-dependency) (< beg (point) end))
-             (smart-mode-highlight-default pos (smart-mode-line-end-position))
+           (while (and (smart-mode-next-dependency) (< pos (point) end))
+             (smart-mode-end-of-line) ;; to the end of dependency line
+             (smart-mode-highlight-default pos (point))
              (while (progn (beginning-of-line 2) (looking-at-p "^\t"))
                (setq bor (+ (point) 1)) ;; beginning of recipe
                (let ((dialect (get-text-property bor 'recipe-dialect)))
-                 ;;(smart-mode-debug-message "dialect: %S" dialect)
+                 ;;(smart-mode-debug-message "recipe-dialect: %S" dialect)
                  (smart-mode-end-of-line)
                  ;; highlight recipe dialect
                  (if (or (null dialect) (string-equal dialect "none"))
                      (smart-mode-highlight-recipe-default bor (point))
                    (let ((func (intern-soft (format "smart-mode-highlight-recipe-%s" dialect))))
-                     (if (and func (functionp func)) (funcall func beg end)
+                     (if (and func (functionp func)) (funcall func bor (point))
                        (message "ERROR: unimplemented highlighter for dialect (%s)" dialect))))
-                 ;;(if (looking-at-p "\n") (forward-char))
                  (setq pos (point)))))
            (if (< pos end) (smart-mode-highlight-default pos end))))))))
 
