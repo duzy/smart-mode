@@ -15,11 +15,34 @@
 ;;; Code:
 (require 'make-mode)
 
+;;---- GROUPS ------------------------------------------------------------
+
+(defgroup smart nil
+  "Smart editing commands for Emacs."
+  :link '(custom-group-link :tag "Font Lock Faces group" font-lock-faces)
+  :group 'tools
+  :prefix "smart-")
+
 ;;---- CONSTS ------------------------------------------------------------
 
-(defconst smart-var-use-regex
+;; Note that the first big subexpression is used by font lock.
+(defconst smart-mode-dependency-regex ;; see `makefile-dependency-regex'
+  ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
+  "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
+  "Regex used to find dependency lines in a makefile.")
+
+(defconst smart-mode-calling-regex
   "[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
   "Regex used to find $(macro) uses in a makefile.")
+
+;; Note that the first and second subexpression is used by font lock.
+(defconst smart-mode-defineassign-regex ;; see `makefile-macroassign-regex'
+  ;; We used to match not just the varname but also the whole value
+  ;; (spanning potentially several lines).
+  ;; "^ *\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=[ \t]*\\(\\(?:.+\\\\\n\\)*.+\\)\\|[*:+]?[:?]?=[ \t]*\\(\\(?:.*\\\\\n\\)*.*\\)\\)"
+  ;; What about the define statement?  What about differentiating this for makepp?
+  "\\(?:^\\|^export\\|^override\\|:\\|:[ \t]*override\\)[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
+  "Regex used to find macro assignment lines in a makefile.")
 
 (defconst smart-mode-dialects
   `("c" "c++" "shell" "python" "perl" "lua")
@@ -36,20 +59,20 @@
              (regexp-opt smart-mode-dialect-interpreters t)))
   "Supported dialects regexps by smart.")
 
-(defconst smart-statements
-  `("project" "module" "template" "files" "extensions" "dialect" "instance" "import" "use" "include" "eval" "export"
-    ,@(cdr makefile-statements))
+(defconst smart-mode-statements ;; see `makefile-statements'
+  `("project" "module" "template" "files" "extensions"
+    "dialect" "import" "use" "include"  "eval" "export")
   "List of keywords understood by smart.")
 
-(defconst smart-mode-default-font-lock-keywords
+(defconst smart-mode-default-font-lock-keywords---deprecated
   (makefile-make-font-lock-keywords
-   smart-var-use-regex
-   smart-statements
+   smart-mode-calling-regex
+   smart-mode-statements
    t
    "^\\(?: [ \t]*\\)?if\\(n\\)\\(?:def\\|eq\\)\\>"
 
    '("[^$]\\(\\$[({][@%*][DF][})]\\)"
-     1 'makefile-targets append)
+     1 'smart-mode-targets-face append)
 
    ;; $(function ...) ${function ...}
    '("[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\s \\)"
@@ -58,7 +81,7 @@
    ;; $(shell ...) ${shell ...}
    '("[^$]\\$\\([({]\\)shell[ \t]+"
      makefile-match-function-end nil nil
-     (1 'makefile-shell prepend t))
+     (1 'smart-mode-dependency-shell-face prepend t))
 
    ;; $(template ...) $(module ...)
    '("[^$]\\$[({]\\(template\\|module\\|use\\)[ \t]\\([^,)}]+\\)"
@@ -75,6 +98,70 @@
    ;;   (2 smart-recipe-face prepend)
    ;;   )
    ))
+
+(defvar smart-mode-highlight-useless-spaces t)
+(defconst smart-mode-default-font-lock-keywords ;; see `makefile-make-font-lock-keywords'
+  (let ((keywords smart-mode-statements))
+    `((,smart-mode-defineassign-regex
+       (1 font-lock-variable-name-face)
+       ;; This is for after !=
+       (2 'smart-mode-dependency-shell-face prepend t)
+       ;; This is for after normal assignment
+       (3 'font-lock-string-face prepend t))
+
+      (,smart-mode-calling-regex 
+       1 font-lock-variable-name-face prepend)
+
+      ;; Automatic variable references and single character variable
+      ;; references, but not shell variables references.
+      ("[^$]\\$\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
+       1 font-lock-constant-face prepend)
+      ("[^$]\\(\\$[@%*]\\)"
+       1 'smart-mode-targets-face append)
+
+      ;; Fontify conditionals and includes.
+      (,(concat "^\\(?: [ \t]*\\)?"
+                (replace-regexp-in-string
+                 " " "[ \t]+"
+                 (if (eq (car keywords) t)
+                     (replace-regexp-in-string "-" "[_-]"
+                                               (regexp-opt (cdr keywords) t))
+                   (regexp-opt keywords t)))
+                "\\>[ \t]*\\([^: \t\n#]*\\)")
+       (1 font-lock-keyword-face) (2 font-lock-variable-name-face))
+      
+      ;; ("^\\(?: [ \t]*\\)?if\\(n\\)\\(?:def\\|eq\\)\\>"
+      ;;  (1 font-lock-negation-char-face prepend)
+      ;;  (2 font-lock-negation-char-face prepend t))
+      
+      ,@(if smart-mode-highlight-useless-spaces
+            '(;; Highlight lines that contain just whitespace.
+              ;; They can cause trouble, especially if they start with a tab.
+              ("^[ \t]+$" . 'smart-mode-useless-space-face)
+
+              ;; Highlight shell comments that Make treats as commands,
+              ;; since these can fool people.
+              ("^\t+#" 0 'smart-mode-useless-space-face t)
+
+              ;; Highlight spaces that precede tabs.
+              ;; They can make a tab fail to be effective.
+              ("^\\( +\\)\t" 1 'smart-mode-useless-space-face)))
+
+      ;; $(function ...) ${function ...} (see `makefile-gmake-font-lock-keywords')
+      ("[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\s \\)"
+       1 font-lock-function-name-face prepend)
+
+      ;; $(shell ...) ${shell ...} (see `makefile-gmake-font-lock-keywords')
+      ("[^$]\\$\\([({]\\)shell[ \t]+"
+       makefile-match-function-end nil nil
+       (1 'smart-mode-dependency-shell-face prepend t))
+      
+      ;; Do dependencies.
+      (smart-mode-match-dependency
+       (1 'smart-mode-targets-face prepend)
+       ;;(2 'font-lock-builtin-face prepend t)
+       (3 'smart-mode-dependency-shell-face prepend t)
+       ))))
 
 ;; font-lock-keyword-face
 (defconst smart-mode-recipe-default-font-lock-keywords
@@ -103,14 +190,6 @@
 (defconst smart-mode-recipe-lua-font-lock-keywords
   `())
 
-;;---- GROUPS ------------------------------------------------------------
-
-(defgroup smart nil
-  "Smart editing commands for Emacs."
-  :link '(custom-group-link :tag "Font Lock Faces group" font-lock-faces)
-  :group 'tools
-  :prefix "smart-")
-
 ;;---- CUSTOMS -----------------------------------------------------------
 
 (defcustom smart-mode-hook nil
@@ -120,22 +199,43 @@
 
 ;;---- FACES -------------------------------------------------------------
 
-(defface smart-module-name-face
+(defface smart-mode-module-name-face
   '((t :inherit font-lock-variable-name-face)) ;; :background  "LightBlue1"
   "Face to use for additionally highlighting rule targets in Font-Lock mode."
   :group 'smart)
 
 ;; http://raebear.net/comp/emacscolors.html
-(defface smart-recipe-indent-face
+(defface smart-mode-recipe-indent-face
   '((((class color) (background light)) :background "gray88" :italic t)
     (((class color) (background dark)) :background "LightDim" :italic t)
     (t :inherit font-lock-constant-face))
   "Face to use for additionally highlighting rule targets in Font-Lock mode."
   :group 'smart)
 
-(defface smart-recipe-face '((t :background "gray96"))
+(defface smart-mode-recipe-face '((t :background "gray96"))
   "Face to use for additionally highlighting rule targets in Font-Lock mode."
   :group 'smart)
+
+(defface smart-mode-useless-space-face
+  '((((class color)) (:background  "hotpink"))
+    (t (:reverse-video t)))
+  "Face to use for highlighting leading spaces in Font-Lock mode."
+  :group 'smart)
+
+(defface smart-mode-targets-face
+  ;; This needs to go along both with foreground and background colors (i.e. shell)
+  '((t (:inherit font-lock-function-name-face)))
+  "Face to use for additionally highlighting rule targets in Font-Lock mode."
+  :group 'smart
+  :version "22.1")
+
+(defface smart-mode-dependency-shell-face
+  ()
+  ;;'((((class color) (min-colors 88) (background light)) (:background  "seashell1"))
+  ;;  (((class color) (min-colors 88) (background dark)) (:background  "seashell4")))
+  "Face to use for additionally highlighting Shell commands in Font-Lock mode."
+  :group 'smart
+  :version "22.1")
 
 ;;---- VARS --------------------------------------------------------------
 
@@ -149,8 +249,8 @@
 (defvar smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 (defvar smart-mode-inhibit-fontification nil)
 
-(defvar smart-recipe-indent-face 'smart-recipe-indent-face)
-(defvar smart-recipe-face 'smart-recipe-face)
+(defvar smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
+(defvar smart-mode-recipe-face 'smart-mode-recipe-face)
 
 (defvar smart-recipe-overlays nil
   "The smart-mode recipe overlays used in the current buffer.")
@@ -290,19 +390,53 @@
           (setq dialect (match-string 1))))
       dialect)))
 
+(defun smart-mode-match-dependency (bound)
+  "Search for `smart-mode-dependency-regex' up to BOUND.
+Checks that the colon has not already been fontified, else we
+matched in a rule action."
+  (catch 'found
+    (let ((pt (point)))
+      (while (progn (skip-chars-forward makefile-dependency-skip bound)
+		    (< (point) (or bound (point-max))))
+	(forward-char)
+	(or (eq (char-after) ?=)
+	    (get-text-property (1- (point)) 'face)
+	    (if (> (line-beginning-position) (+ (point-min) 2))
+		(eq (char-before (line-end-position 0)) ?\\))
+	    (when (save-excursion
+		    (beginning-of-line)
+		    (looking-at smart-mode-dependency-regex))
+	      (save-excursion
+		(let ((deps-end (match-end 1))
+		      (match-data (match-data)))
+		  (goto-char deps-end)
+		  (skip-chars-backward " \t")
+		  (setq deps-end (point))
+		  (beginning-of-line)
+		  (skip-chars-forward " \t")
+		  ;; Alter the bounds recorded for subexp 1,
+		  ;; which is what is supposed to match the targets.
+		  (setcar (nthcdr 2 match-data) (point))
+		  (setcar (nthcdr 3 match-data) deps-end)
+		  (store-match-data match-data)))
+	      (end-of-line)
+	      (throw 'found (point)))))
+      (goto-char pt))
+    nil))
+
 (defun smart-recipe-dependency-line-p ()
   "Predicte if current line is recipe or dependency line."
   (save-excursion
     (beginning-of-line)
     (or (looking-at-p "^\t")
-        (makefile-match-dependency (smart-mode-line-end-position)))))
+        (smart-mode-match-dependency (smart-mode-line-end-position)))))
 
 (defun smart-can-add-recipe-p ()
   "Predicte if pointer is after recipe or dependency line."
   (save-excursion
     (forward-line -1) (beginning-of-line)
     (or (looking-at-p "^\t")
-        (makefile-match-dependency (smart-mode-line-end-position)))))
+        (smart-mode-match-dependency (smart-mode-line-end-position)))))
 
 (defun smart-previous-dependency ()
   "Move point to the beginning of the previous dependency line.
@@ -331,7 +465,7 @@ Returns `t' if there's a next dependency line, or nil."
    ((and (looking-at-p "^") (smart-can-add-recipe-p))
     (smart-insert-mark-recipe "\t"))
    ((save-excursion ;; If a dependency or assignment..
-      (or (makefile-match-dependency (smart-mode-line-end-position))
+      (or (smart-mode-match-dependency (smart-mode-line-end-position))
           (progn (beginning-of-line) (looking-at-p "^[^\t].*?="))))
     (indent-line-to 0))
    (t (insert-string "\t"))))
@@ -347,7 +481,7 @@ Returns `t' if there's a next dependency line, or nil."
     (smart-insert-mark-recipe "\n\t"))
    ((save-excursion
       (beginning-of-line)
-      (makefile-match-dependency (smart-mode-line-end-position)))
+      (smart-mode-match-dependency (smart-mode-line-end-position)))
     (smart-insert-mark-recipe "\n\t"))
    (t (insert-string "\n"))))
 
@@ -365,12 +499,12 @@ Returns `t' if there's a next dependency line, or nil."
     (unless ovl1 
       (setq ovl1 (make-overlay beg bor))
       (overlay-put ovl1 'smart-syntax "recipe-prefix")
-      (overlay-put ovl1 'face smart-recipe-indent-face)
+      (overlay-put ovl1 'face smart-mode-recipe-indent-face)
       (overlay-put ovl1 'read-only t))
     (unless ovl2
       (setq ovl2 (make-overlay bor end))
       (overlay-put ovl2 'smart-syntax "recipe")
-      (overlay-put ovl2 'face smart-recipe-face))
+      (overlay-put ovl2 'face smart-mode-recipe-face))
     ;;(smart-mode-debug-message (format "recipe: %s" (buffer-substring bor (- eol 1))))
     t))
 
