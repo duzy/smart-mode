@@ -13,7 +13,7 @@
 ;;
 
 ;;; Code:
-(require 'make-mode)
+;;(require 'make-mode)
 
 ;;---- GROUPS ------------------------------------------------------------
 
@@ -30,6 +30,9 @@
   ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
   "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
   "Regex used to find dependency lines in a makefile.")
+
+(defvar smart-mode-dependency-skip "^:"
+  "Characters to skip to find a line that might be a dependency.")
 
 (defconst smart-mode-calling-regex
   "[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
@@ -63,41 +66,6 @@
   `("project" "module" "template" "files" "extensions"
     "dialect" "import" "use" "include"  "eval" "export")
   "List of keywords understood by smart.")
-
-(defconst smart-mode-default-font-lock-keywords---deprecated
-  (makefile-make-font-lock-keywords
-   smart-mode-calling-regex
-   smart-mode-statements
-   t
-   "^\\(?: [ \t]*\\)?if\\(n\\)\\(?:def\\|eq\\)\\>"
-
-   '("[^$]\\(\\$[({][@%*][DF][})]\\)"
-     1 'smart-mode-targets-face append)
-
-   ;; $(function ...) ${function ...}
-   '("[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\s \\)"
-     1 font-lock-function-name-face prepend)
-
-   ;; $(shell ...) ${shell ...}
-   '("[^$]\\$\\([({]\\)shell[ \t]+"
-     makefile-match-function-end nil nil
-     (1 'smart-mode-dependency-shell-face prepend t))
-
-   ;; $(template ...) $(module ...)
-   '("[^$]\\$[({]\\(template\\|module\\|use\\)[ \t]\\([^,)}]+\\)"
-     (1 font-lock-builtin-face prepend)
-     (2 font-lock-string-face prepend))
-
-   ;; $(commit ...)
-   '("[^$]\\$[({]\\(commit\\|post\\)[ \t)}]"
-     1 font-lock-builtin-face prepend)
-
-   ;; ;; recipes
-   ;; '("^\\(\t\\)\\(.+\\)"
-   ;;   (1 smart-recipe-indent-face prepend)
-   ;;   (2 smart-recipe-face prepend)
-   ;;   )
-   ))
 
 (defvar smart-mode-highlight-useless-spaces t)
 (defconst smart-mode-default-font-lock-keywords ;; see `makefile-make-font-lock-keywords'
@@ -153,7 +121,7 @@
 
       ;; $(shell ...) ${shell ...} (see `makefile-gmake-font-lock-keywords')
       ("[^$]\\$\\([({]\\)shell[ \t]+"
-       makefile-match-function-end nil nil
+       smart-mode-match-function-end nil nil
        (1 'smart-mode-dependency-shell-face prepend t))
       
       ;; Do dependencies.
@@ -285,10 +253,10 @@
 (defvar smart-mode-map ;; See `makefile-mode-map'
   (let ((map (make-sparse-keymap))
 	(opt-map (make-sparse-keymap)))
-    (define-key map "\M-p"     'smart-previous-dependency)
-    (define-key map "\M-n"     'smart-next-dependency)
-    (define-key map "\n"       'smart-newline) ;; C-j
-    (define-key map "\t"       'smart-tab-it)  ;; C-i or <tab>
+    (define-key map "\M-p"     'smart-mode-previous-dependency)
+    (define-key map "\M-n"     'smart-mode-next-dependency)
+    (define-key map "\n"       'smart-mode-newline) ;; C-j
+    (define-key map "\t"       'smart-mode-tab-it)  ;; C-i or <tab>
     map)
   "The keymap that is used in SMArt mode.")
 
@@ -367,7 +335,7 @@
 (defun smart-mode-default-scan (beg end)
   (save-excursion
     (goto-char beg) ;; start from the beginning
-    (while (and (smart-next-dependency) (< beg (point) end))
+    (while (and (smart-mode-next-dependency) (< beg (point) end))
       (let* ((eol (smart-mode-line-end-position)) (dialect (smart-mode-scan-dependency-dialect eol)))
         ;;(smart-mode-debug-message "dependency:%S" (buffer-substring (point) (smart-mode-line-end-position)))
         ;;(smart-mode-debug-message "dialect: %S" dialect)
@@ -390,13 +358,26 @@
           (setq dialect (match-string 1))))
       dialect)))
 
+(defun smart-mode-match-function-end (_end)
+  "To be called as an anchored matcher by font-lock.
+The anchor must have matched the opening parens in the first group."
+  (let ((s (match-string-no-properties 1)))
+    ;; FIXME forward-sexp or somesuch would be better?
+    (if (setq s (cond ((string= s "(") ")")
+		      ((string= s "{") "}")
+		      ((string= s "[") "]")
+		      ((string= s "((") "))")
+		      ((string= s "{{") "}}")
+		      ((string= s "[[") "]]")))
+	(re-search-forward (concat "\\(.*\\)[ \t]*" s) (line-end-position) t))))
+
 (defun smart-mode-match-dependency (bound)
   "Search for `smart-mode-dependency-regex' up to BOUND.
 Checks that the colon has not already been fontified, else we
 matched in a rule action."
   (catch 'found
     (let ((pt (point)))
-      (while (progn (skip-chars-forward makefile-dependency-skip bound)
+      (while (progn (skip-chars-forward smart-mode-dependency-skip bound)
 		    (< (point) (or bound (point-max))))
 	(forward-char)
 	(or (eq (char-after) ?=)
@@ -438,27 +419,56 @@ matched in a rule action."
     (or (looking-at-p "^\t")
         (smart-mode-match-dependency (smart-mode-line-end-position)))))
 
-(defun smart-previous-dependency ()
+(defun smart-mode-next-dependency-inner ()
+  "Move point to the beginning of the next dependency line."
+  (interactive)
+  (let ((here (point)))
+    (end-of-line)
+    (if (smart-mode-match-dependency nil)
+	(progn (beginning-of-line) t)	; indicate success
+      (goto-char here) nil)))
+
+(defun smart-mode-previous-dependency-inner ()
+  "Move point to the beginning of the previous dependency line."
+  (interactive)
+  (let ((pt (point)))
+    (beginning-of-line)
+    ;; smart-mode-match-dependency done backwards:
+    (catch 'found
+      (while (progn (skip-chars-backward smart-mode-dependency-skip)
+		    (not (bobp)))
+	(or (prog1 (eq (char-after) ?=)
+	      (backward-char))
+	    (get-text-property (point) 'face)
+	    (beginning-of-line)
+	    (if (> (point) (+ (point-min) 2))
+		(eq (char-before (1- (point))) ?\\))
+	    (if (looking-at smart-mode-dependency-regex)
+		(throw 'found t))))
+      (goto-char pt)
+      nil)))
+
+(defun smart-mode-previous-dependency ()
   "Move point to the beginning of the previous dependency line.
 Returns `t' if there's a previous dependency line, or nil."
   (interactive)
   (let ((pos (point)) (continue t))
-    (if (makefile-previous-dependency)
+    (if (smart-mode-previous-dependency-inner)
         (prog1 t (while (and continue (looking-at-p "^\t"))
-                   (unless (makefile-previous-dependency)
+                   (unless (smart-mode-previous-dependency-inner)
                      (goto-char pos) (setq continue nil)))))))
 
-(defun smart-next-dependency ()
+(defun smart-mode-next-dependency ()
   "Move point to the beginning of the next dependency line.
 Returns `t' if there's a next dependency line, or nil."
   (interactive)
   (let ((pos (point)) (continue t))
-    (if (makefile-next-dependency)
+    (if (smart-mode-next-dependency-inner)
         (prog1 t (while (and continue (looking-at-p "^\t"))
-                   (unless (makefile-next-dependency)
+                   (unless (smart-mode-next-dependency-inner)
                      (goto-char pos) (setq continue nil)))))))
 
-(defun smart-tab-it ()
+(defun smart-mode-tab-it ()
   (interactive)
   (cond
    ((looking-at-p "^\t") (forward-char))
@@ -470,7 +480,7 @@ Returns `t' if there's a next dependency line, or nil."
     (indent-line-to 0))
    (t (insert-string "\t"))))
 
-(defun smart-newline ()
+(defun smart-mode-newline ()
   (interactive)
   (cond
    ;;((looking-at-p "^[^\t]") (insert-string "\n"))
@@ -708,7 +718,7 @@ Returns `t' if there's a next dependency line, or nil."
                (inhibit-quit t) (pos beg) (bor))
            (remove-list-of-text-properties beg end '(font-lock-face face))
            (goto-char beg) ;; start from the beginning
-           (while (and (smart-next-dependency) (< beg (point) end))
+           (while (and (smart-mode-next-dependency) (< beg (point) end))
              (smart-mode-highlight-default pos (smart-mode-line-end-position))
              (while (progn (beginning-of-line 2) (looking-at-p "^\t"))
                (setq bor (+ (point) 1)) ;; beginning of recipe
