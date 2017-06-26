@@ -25,6 +25,17 @@
 
 ;;---- CONSTS ------------------------------------------------------------
 
+(defconst smart-mode-syntax-propertize-function
+  (syntax-propertize-rules
+   ;; From make-mode.el (`makefile-syntax-propertize-function') .
+   ;; A `#' begins a comment in sh when it is unquoted and at the beginning
+   ;; of a word.  In the shell, words are separated by metacharacters.
+   ;; The list of special chars is taken from the single-unix spec of the
+   ;; shell command language (under `quoting') but with `$' removed.
+   ("[^|&;<>()`\\\"' \t\n]\\(#+\\)" (1 "_"))
+   ;; Change the syntax of a quoted newline so that it does not end a comment.
+   ("\\\\\n" (0 "."))))
+
 ;; Note that the first big subexpression is used by font lock.
 (defconst smart-mode-dependency-regex ;; see `makefile-dependency-regex'
   ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
@@ -39,12 +50,13 @@
   "Regex used to find $(macro) uses in a makefile.")
 
 ;; Note that the first and second subexpression is used by font lock.
-(defconst smart-mode-defineassign-regex ;; see `makefile-macroassign-regex'
+(defconst smart-mode-defineassign-regex
   ;; We used to match not just the varname but also the whole value
   ;; (spanning potentially several lines).
+  ;; See `makefile-macroassign-regex'.
   ;; "^ *\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=[ \t]*\\(\\(?:.+\\\\\n\\)*.+\\)\\|[*:+]?[:?]?=[ \t]*\\(\\(?:.*\\\\\n\\)*.*\\)\\)"
-  ;; What about the define statement?  What about differentiating this for makepp?
-  "\\(?:^\\|^export\\|^override\\|:\\|:[ \t]*override\\)[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
+  ;; "\\(?:^\\|^export\\|^override\\|:\\|:[ \t]*override\\)[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
+  "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
   "Regex used to find macro assignment lines in a makefile.")
 
 (defconst smart-mode-dialects
@@ -66,6 +78,8 @@
   `("project" "module" "template" "files" "extensions"
     "dialect" "import" "use" "include"  "eval" "export")
   "List of keywords understood by smart.")
+
+(defconst smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 
 (defvar smart-mode-highlight-useless-spaces t)
 (defconst smart-mode-default-font-lock-keywords ;; see `makefile-make-font-lock-keywords'
@@ -212,7 +226,6 @@
 (defvar font-lock-beg)
 (defvar font-lock-end)
 
-(defvar smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 (defvar smart-mode-debug-message-on t)
 
 (defvar smart-mode-inhibit-fontification nil)
@@ -235,10 +248,10 @@
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar smart-mode-scan-properties
   (list 'project 'define
-        'rule-entry 'rule-entry-list
-        'rule-dependency 'rule-dependency-list
+        'rule-target-list
+        'rule-dependency-list
         'modifier-list 'modifier
-        'recipe-prefix 'recipe 'recipe-dialect
+        'recipe 'recipe-prefix 'recipe-dialect
         'syntax-table)
   "Text properties used for code regions/tokens.")
 
@@ -292,7 +305,7 @@
 ;;---- DEFUNS ------------------------------------------------------------
 
 (defun smart-mode-scan-region (beg end)
-  "Identify syntactic symbols (strings/comments/keywords, etc.)."
+  "Identify syntactic tokens/symbols (strings/comments/keywords, etc.)."
   (smart-mode-debug-message "scan-region: beg(%d) end(%d)" beg end)
   (setq smart-mode-scan-beg beg
         smart-mode-scan-end end)
@@ -340,8 +353,22 @@
 (defun smart-mode-dialect-lua-scan (beg end)
   (message "todo: scan lua dialect"))
 
+;; TODO:
+;; 1. mark comments:
+;;  (put-text-property beg (1+ beg) 'syntax-table (string-to-syntax "<"))
+;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax "<"))
+;; 2. mark strings:
+;;  (put-text-property beg (1+ beg) 'syntax-table (string-to-syntax "|"))
+;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax "|"))
 (defun smart-mode-default-scan (beg end)
   (save-excursion
+    (goto-char beg) ;; start from the beginning
+    (while (re-search-forward "'[^']*'" end t)
+      (let ((ma (match-beginning 0)) (mb (match-end 0)))
+        (message "string: %s (%s)" (match-string 0) (buffer-substring ma mb))
+        (put-text-property ma (1+ ma) 'syntax-table (string-to-syntax "|"))
+        (put-text-property mb (1- mb) 'syntax-table (string-to-syntax "|"))))
+
     (goto-char beg) ;; start from the beginning
     (while (and (smart-mode-next-dependency) (< beg (point) end))
       (let* ((eol (smart-mode-line-end-position)) (dialect (smart-mode-scan-dependency-dialect eol)))
@@ -526,46 +553,6 @@ Returns `t' if there's a next dependency line, or nil."
     ;;(smart-mode-debug-message (format "recipe: %s" (buffer-substring bor (- eol 1))))
     t))
 
-(defun smart-mode-comment-boundaries (&optional pos)
-  (interactive)
-  (unless pos (setq pos (point)))
-  (let ((beg pos) (end pos) prop)
-    (save-excursion
-      (goto-char pos)
-      (setq prop
-            (cond
-             ((eq (get-text-property pos 'block-token) 'comment) 'block-token)
-             ((eq (get-text-property pos 'tag-type) 'comment) 'tag-type)
-             ((eq (get-text-property pos 'part-token) 'comment) 'part-token)
-             (t nil)
-             ))
-      (if (null prop)
-          (setq beg nil
-                end nil)
-        (when (and (not (bobp))
-                   (eq (get-text-property pos prop) (get-text-property (1- pos) prop)))
-          (setq beg (or (previous-single-property-change pos prop) (point-min))))
-        (when (and (not (eobp))
-                   (eq (get-text-property pos prop) (get-text-property (1+ pos) prop)))
-          (setq end (or (next-single-property-change pos prop) (point-max)))))
-      (when (and beg (string= (buffer-substring-no-properties beg (+ beg 2)) "//"))
-        (goto-char end)
-        (while (and (looking-at-p "\n[ ]*//")
-                    (not (eobp)))
-          (search-forward "//")
-          (backward-char 2)
-          ;;(smart-mode-debug-message "%S" (point))
-          (setq end (next-single-property-change (point) prop))
-          (goto-char end)
-          ;;(smart-mode-debug-message "%S" (point))
-          ) ;while
-        ) ;when
-      (when end (setq end (1- end)))
-      ) ;save-excursion
-    ;;(smart-mode-debug-message "beg=%S end=%S" beg end)
-    (if (and beg end) (cons beg end) nil)
-    ))
-
 (defun smart-mode-scan-buffer ()
   "Scan entine buffer."
   (interactive)
@@ -588,14 +575,11 @@ Returns `t' if there's a next dependency line, or nil."
 (defun smart-mode-propertize (&optional beg end)
   (unless beg (setq beg smart-mode-change-beg))
   (unless end (setq end smart-mode-change-end))
+  (setq smart-mode-change-beg nil smart-mode-change-end nil)
   (smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
-  (when (and end (> end (point-max)))
-    (setq end (point-max)))
-  (setq smart-mode-change-beg nil
-        smart-mode-change-end nil)
-  (cond
-   ((or (null beg) (null end)) nil)
-   (t (smart-mode-invalidate-region beg end))))
+  (if (and end (> end (point-max))) (setq end (point-max)))
+  (cond ((or (null beg) (null end)) nil)
+        (t (smart-mode-invalidate-region beg end))))
 
 (defun smart-mode-invalidate-region (beg end)
   ;; TODO: decide invalidate range (beg, end) according to the dialect
@@ -627,6 +611,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-fontify-region (beg end keywords) ;; see `font-lock-default-fontify-region'
   (smart-mode-debug-message "fontify-region: beg(%S) end(%S)" beg end)
+  ;;(syntax-propertize end)
   (save-excursion
     ;;(member smart-mode-engine '("archibus" "asp" "template-toolkit"))
     (let ((font-lock-multiline nil)
@@ -680,14 +665,6 @@ Returns `t' if there's a next dependency line, or nil."
 
 ;;---- POSITION ----------------------------------------------------------
 
-(defun smart-mode-comment-beginning-position (&optional pos)
-  (unless pos (setq pos (point)))
-  (car (smart-mode-comment-boundaries pos)))
-
-(defun smart-mode-comment-end-position (&optional pos)
-  (unless pos (setq pos (point)))
-  (cdr (smart-mode-comment-boundaries pos)))
-
 (defun smart-mode-line-end-position (&optional pos) ;; `line-end-position'
   (save-excursion
     (smart-mode-end-of-line)
@@ -698,20 +675,23 @@ Returns `t' if there's a next dependency line, or nil."
 ;; ;;;###autoload
 (define-derived-mode smart-mode smart-mode-base-mode "smart"
   "Major mode for editing SMArt scripts."
+  ;;:syntax-table smart-mode-syntax-table
 
   (setq font-lock-defaults `(smart-mode-font-lock-keywords t)
-        font-lock-extend-region-functions '(smart-mode-extend-region)
+        ;;font-lock-defaults `(smart-mode-font-lock-keywords ,@(cdr font-lock-defaults))
         font-lock-unfontify-region-function 'smart-mode-unfontify-region
-        font-lock-support-mode nil
+        font-lock-extend-region-functions '(smart-mode-extend-region)
+        font-lock-support-mode nil ;; avoid any conflicts
         comment-start "#"
         comment-end ""
+        comment-start-skip "#+[ \t]*"
         comment-region-function 'smart-mode-comment-uncomment-region
         uncomment-region-function 'smart-mode-comment-uncomment-region
         indent-line-function 'smart-mode-indent-line)
 
-  ;;(setq smart-mode-change-beg (point-min)
-  ;;      smart-mode-change-end (point-max))
-
+  ;;(setq-local syntax-propertize-function
+  ;;            smart-mode-syntax-propertize-function)
+  
   ;;(when (> (point-max) 256000)
   ;;  (smart-mode-highlight-buffer))
 
