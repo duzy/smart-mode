@@ -38,7 +38,8 @@
 
 ;; Note that the first big subexpression is used by font lock.
 (defconst smart-mode-dependency-regex ;; see `makefile-dependency-regex'
-  ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
+  ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
+  ;; "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
   "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
   "Regex used to find dependency lines in a makefile.")
 
@@ -56,7 +57,7 @@
   ;; See `makefile-macroassign-regex'.
   ;; "^ *\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=[ \t]*\\(\\(?:.+\\\\\n\\)*.+\\)\\|[*:+]?[:?]?=[ \t]*\\(\\(?:.*\\\\\n\\)*.*\\)\\)"
   ;; "\\(?:^\\|^export\\|^override\\|:\\|:[ \t]*override\\)[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
-  "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
+  "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(!=\\|[*:+]?[:?]?=\\)"
   "Regex used to find macro assignment lines in a makefile.")
 
 (defconst smart-mode-dialects
@@ -67,6 +68,14 @@
   `("shell" "python" "perl" "lua")
   "Supported dialects by smart.")
 
+(defconst smart-mode-inline-space
+  "\\(:[ \t]\\|\\\n\\)"
+  "Regex matching inline space, including escaped (\\).")
+
+(defconst smart-mode-project-name-regex
+  "\\(:@\\|[:alpha:][a-zA-Z0-9_-]*\\)"
+  "Regex matching project name")
+
 (defconst smart-mode-dialect-regexs
   `(,(format "(\\s-*\\(?:plain\\|docksh\\)\\s-+%s\\s-*)"
              (regexp-opt smart-mode-dialects t))
@@ -74,16 +83,20 @@
              (regexp-opt smart-mode-dialect-interpreters t)))
   "Supported dialects regexps by smart.")
 
-(defconst smart-mode-statements ;; see `makefile-statements'
-  `("project" "module" "template" "files" "extensions"
-    "dialect" "import" "use" "include"  "eval" "export")
-  "List of keywords understood by smart.")
+(defconst smart-mode-statement-keywords
+  `("project" "import" "use" "files" "extensions"
+    "include"  "eval" "export")
+  "List of keywords understood by smart as statements.")
+
+(defconst smart-mode-statements
+  (concat "^\\s-*" (regexp-opt smart-mode-statement-keywords 'words))
+  "Regex to match keywords understood by smart as statements.")
 
 (defconst smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 
 (defvar smart-mode-highlight-useless-spaces t)
 (defconst smart-mode-default-font-lock-keywords ;; see `makefile-make-font-lock-keywords'
-  (let ((keywords smart-mode-statements))
+  (let ((keywords smart-mode-statement-keywords))
     `((,smart-mode-defineassign-regex
        (1 font-lock-variable-name-face)
        ;; This is for after !=
@@ -252,6 +265,7 @@
         'rule-dependency-list
         'modifier-list 'modifier
         'recipe 'recipe-prefix 'recipe-dialect
+        'smart-token 'smart-semantic 'smart-dialect
         'syntax-table)
   "Text properties used for code regions/tokens.")
 
@@ -356,11 +370,121 @@
 ;; TODO:
 ;; 1. mark comments:
 ;;  (put-text-property beg (1+ beg) 'syntax-table (string-to-syntax "<"))
-;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax "<"))
+;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax ">"))
 ;; 2. mark strings:
 ;;  (put-text-property beg (1+ beg) 'syntax-table (string-to-syntax "|"))
 ;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax "|"))
 (defun smart-mode-default-scan (beg end)
+  (save-excursion
+    (let (mb me ms eol)
+      (remove-list-of-text-properties beg end '(font-lock-face face))
+      (goto-char beg) ;; start from the beginning
+      (while (< (point) end)
+        (cond
+         
+         ((looking-at smart-mode-statements)
+          (setq mb (match-beginning 0)
+                me (match-end 0)
+                ms (match-string 0))
+          (put-text-property mb me 'smart-token ms)
+          (put-text-property mb me 'font-lock-face 'font-lock-keyword-face)
+          (goto-char me) ;; skip matched
+          ;; FIXME: using (skip-syntax-forward (string-to-syntax "<>"))
+          (skip-chars-forward smart-mode-inline-space)
+          (cond
+           ((string= ms "project")
+            (cond ;; project name
+             ((looking-at smart-mode-project-name-regex)
+              (setq mb (match-beginning 0)
+                    me (match-end 0)
+                    ms (match-string 0))
+              (goto-char me) ;; skip name
+              (put-text-property mb me 'smart-token "bareword")
+              (put-text-property mb me 'smart-semantic "proname")
+              (put-text-property mb me 'font-lock-face 'font-lock-type-face))
+             (t (message "ERROR: "))))
+           ((string= ms "import")
+            )
+           ((string= ms "use")
+            )
+           ((string= ms "files")
+            )
+           ((string= ms "eval")
+            )
+           (t (goto-char (match-end 0)))))
+
+         ((looking-at comment-start) ;; #
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'syntax-table (string-to-syntax "<"))
+          (smart-mode-end-of-line) ;; goto the end of comment
+          (setq me (point)) ;; end position of comment
+          (put-text-property me me 'syntax-table (string-to-syntax ">"))
+          (put-text-property mb me 'font-lock-face 'font-lock-comment-face))
+         
+         ((looking-at "'") ;; FIXME: quote pairing is buggy
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'syntax-table (string-to-syntax "|"))
+          (let ((continue t))
+            (goto-char me) ;; skip the left '    e.g. (forward-char)
+            (while (and continue (search-forward "'" end t))
+              (if (eq ?\\ (char-before (1- (point)))) ;; escape \'
+                  (forward-char) ;; skip the escaped '
+                (setq continue nil)))
+            ;;(forward-char) ;; skip the right '
+            (setq me (point)))
+          (put-text-property me (1+ me) 'syntax-table (string-to-syntax "|"))
+          (put-text-property mb me 'font-lock-face 'font-lock-string-face))
+
+         ((looking-at "\"") ;; FIXME: quote pairing is buggy
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'syntax-table (string-to-syntax "|"))
+          (let ((continue t))
+            (goto-char me) ;; skip the left "    e.g. (forward-char)
+            ;; TODO: scan for calls, e.g. $(foobar), and escapes $$
+            (while (and continue (search-forward "\"" end t))
+              (if (eq ?\\ (char-before (1- (point)))) ;; escape \'
+                  (forward-char) ;; skip the escaped '
+                (setq continue nil)))
+            ;;(forward-char) ;; skip the right "
+            (setq me (point)))
+          (put-text-property me (1+ me) 'syntax-table (string-to-syntax "|"))
+          (put-text-property mb me 'font-lock-face 'font-lock-string-face))
+
+         ((looking-at "\\$\\([({]?\\)")
+          (let ((lpos (point)) (lpar (match-string 1)))
+            ;; TODO: scan calls
+            (message "call: %s" (match-string 1))
+            )
+          (goto-char (match-end 0)))
+
+         ((looking-at smart-mode-defineassign-regex)
+          (setq mb (match-beginning 1) me (match-end 1))
+          (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
+          (setq mb (match-beginning 2) me (match-end 2))
+          (put-text-property mb me 'font-lock-face 'font-lock-type-face)
+          (goto-char (match-end 0)))
+
+         ;; ;; TODO: don't use `smart-mode-match-dependency'
+         ;; ((smart-mode-match-dependency (setq eol (smart-mode-line-end-position)))
+         ;;  (setq mb (match-beginning 1) me (match-end 1))
+         ;;  (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
+         ;;  (goto-char eol))
+         ((looking-at smart-mode-dependency-regex)
+          (setq mb (match-beginning 1) me (match-end 1))
+          (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
+          (let ((eol (smart-mode-line-end-position)) (dialect (smart-mode-scan-dependency-dialect eol)))
+            (while (progn (goto-char eol) (beginning-of-line 2)
+                          (setq eol (smart-mode-line-end-position))
+                          (looking-at "^\\(\t\\)\\(\\(:\\\\\n\\|.\\)*\\)$"))
+              (message "recipe: %s" (match-string 2))
+              (smart-put-recipe-overlays (point) (+ (point) 1))
+              (put-text-property (1+ (point)) eol 'recipe-dialect dialect)
+              ;; TODO: scan dialect recipes
+              )))
+         
+         (t (forward-char)))))))
+
+(defun smart-mode-default-scan-deprecated (beg end)
   (save-excursion
     (goto-char beg) ;; start from the beginning
     (while (re-search-forward "'[^']*'" end t)
@@ -611,7 +735,6 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-fontify-region (beg end keywords) ;; see `font-lock-default-fontify-region'
   (smart-mode-debug-message "fontify-region: beg(%S) end(%S)" beg end)
-  ;;(syntax-propertize end)
   (save-excursion
     ;;(member smart-mode-engine '("archibus" "asp" "template-toolkit"))
     (let ((font-lock-multiline nil)
@@ -677,14 +800,26 @@ Returns `t' if there's a next dependency line, or nil."
   "Major mode for editing SMArt scripts."
   ;;:syntax-table smart-mode-syntax-table
 
+  (make-local-variable 'font-lock-defaults)
+  (make-local-variable 'font-lock-unfontify-region-function)
+  (make-local-variable 'font-lock-extend-region-functions)
+  (make-local-variable 'font-lock-support-mode)
+  (make-local-variable 'font-lock-defaults)
+  (make-local-variable 'comment-start-skip)
+  (make-local-variable 'comment-start)
+  (make-local-variable 'comment-end)
+  (make-local-variable 'comment-region-function)
+  (make-local-variable 'uncomment-region-function)
+  (make-local-variable 'indent-line-function)
+
   (setq font-lock-defaults `(smart-mode-font-lock-keywords t)
         ;;font-lock-defaults `(smart-mode-font-lock-keywords ,@(cdr font-lock-defaults))
         font-lock-unfontify-region-function 'smart-mode-unfontify-region
         font-lock-extend-region-functions '(smart-mode-extend-region)
         font-lock-support-mode nil ;; avoid any conflicts
+        comment-start-skip "#+[ \t]*"
         comment-start "#"
         comment-end ""
-        comment-start-skip "#+[ \t]*"
         comment-region-function 'smart-mode-comment-uncomment-region
         uncomment-region-function 'smart-mode-comment-uncomment-region
         indent-line-function 'smart-mode-indent-line)
@@ -722,6 +857,11 @@ Returns `t' if there's a next dependency line, or nil."
   nil)
 
 (defun smart-mode-highlight-region (&optional beg end)
+  (smart-mode-debug-message "highlight-region: beg(%S) end(%S)" beg end)
+  ;;(smart-mode-highlight-default beg end)
+  nil)
+
+(defun smart-mode-highlight-region-deprecated (&optional beg end)
   (smart-mode-debug-message "highlight-region: beg(%S) end(%S)" beg end)
   (smart-mode-with-silent-modifications
    (save-excursion
