@@ -1,4 +1,4 @@
-;;; smart-mode-old.el --- smart file editing commands for Emacs -*- lexical-binding:t -*-
+;;; smart-mode-simple.el --- smart file editing commands for Emacs -*- lexical-binding:t -*-
 
 ;; Copyright (C) 2016 Duzy Chan <code@duzy.info>, http://duzy.info
 
@@ -36,7 +36,7 @@
 (defvar smart-receipt-face 'smart-receipt-face)
 
 (defvar smart-receipt-overlays nil
-  "The smart-mode-old receipt overlays used in the current buffer.")
+  "The smart-mode-simple receipt overlays used in the current buffer.")
 (make-variable-buffer-local 'smart-receipt-overlays)
 
 (defconst smart-var-use-regex
@@ -83,8 +83,8 @@
    ;;   )
    ))
 
-(defcustom smart-mode-old-hook nil
-  "Normal hook run by `smart-mode-old'."
+(defcustom smart-mode-simple-hook nil
+  "Normal hook run by `smart-mode-simple'."
   :type 'hook
   :group 'smart)
 
@@ -161,7 +161,7 @@
       ;;(message (format "receipt: %s" (buffer-substring bor (- eol 1))))
       t)))
 
-(defvar smart-mode-old-map ;; See `makefile-mode-map'
+(defvar smart-mode-simple-map ;; See `makefile-mode-map'
   (let ((map (make-sparse-keymap))
 	(opt-map (make-sparse-keymap)))
     (define-key map "\M-p"     'smart-previous-dependency)
@@ -171,7 +171,7 @@
     map)
   "The keymap that is used in SMArt mode.")
 
-(defvar smart-mode-old-syntax-table
+(defvar smart-mode-simple-syntax-table
   (let ((st (make-syntax-table)))
     (modify-syntax-entry ?\( "()    " st)
     (modify-syntax-entry ?\) ")(    " st)
@@ -186,15 +186,15 @@
     (modify-syntax-entry ?\n ">     " st)
     (modify-syntax-entry ?= "." st)
     st)
-  "Syntax table used in `smart-mode-old'. (see `makefile-mode-syntax-table')")
+  "Syntax table used in `smart-mode-simple'. (see `makefile-mode-syntax-table')")
 
 ;; prog-mode, makefile-mode, makefile-gmake-mode
-(define-derived-mode smart-mode-old prog-mode "smart"
+(define-derived-mode smart-mode-simple prog-mode "smart"
   "Major mode for editing .smart files."
   (setq font-lock-defaults
         `(smart-font-lock-keywords ,@(cdr font-lock-defaults)))
 
-  ;;(use-local-map smart-mode-old-map)
+  ;;(use-local-map smart-mode-simple-map)
 
   ;; smart-receipt-overlays
   (save-excursion
@@ -207,6 +207,6 @@
 
 ;;; The End.
 
-(provide 'smart-mode-old)
+(provide 'smart-mode-simple)
 
-;;; smart-mode-old.el ends here
+;;; smart-mode-simple.el ends here

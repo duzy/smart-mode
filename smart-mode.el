@@ -37,13 +37,18 @@
    ("\\\\\n" (0 "."))))
 
 ;; Note that the first big subexpression is used by font lock.
-(defconst smart-mode-dependency-regex ;; see `makefile-dependency-regex'
-  ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d)
+(defconst smart-mode-dependency-regex
+  ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d) (see `makefile-dependency-regex')
   ;; "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
-  "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
-  "Regex used to find dependency lines in a makefile.")
+  ;;"^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)"
+  "^\\([^:\n]+\\)\\(:\\)"
+  "Regex used to find a dependency line in a smart file.")
 
-(defvar smart-mode-dependency-skip "^:"
+(defconst smart-mode-recipe-regex
+  "^\\(\t\\)\\(\\(:\\\\\n\\|.\\)*\\)$"
+  "Regex used to match a recipe line.")
+
+(defconst smart-mode-dependency-skip "^:"
   "Characters to skip to find a line that might be a dependency.")
 
 (defconst smart-mode-calling-regex
@@ -68,19 +73,31 @@
   `("shell" "python" "perl" "lua")
   "Supported dialects by smart.")
 
-(defconst smart-mode-inline-space
-  "\\(:[ \t]\\|\\\n\\)"
-  "Regex matching inline space, including escaped (\\).")
-
 (defconst smart-mode-project-name-regex
-  "\\(:@\\|[:alpha:][a-zA-Z0-9_-]*\\)"
+  ;;"\\(@\\|[[:alpha:]]\\(?:[a-zA-Z0-9_\\+]\\|-\\w\\)*\\)\\s-*\\(?:#.*?\\)?$"
+  "\\(@\\|[[:alpha:]]\\(?:[a-zA-Z0-9_\\+]\\|-\\b\\)*\\)\\s-*\\(?:#.*?\\)?$"
   "Regex matching project name")
 
+(defconst smart-mode-modifier-names
+  `("compare" "stdout" "stderr" "stdin"
+    "update-file" "check-file")
+  "List of names understood by smart as modifiers.")
+
+(defconst smart-mode-modifiers-regex
+  (concat "\\s-*" (regexp-opt smart-mode-modifier-names 't))
+  "")
+
+(defconst smart-mode-dialect-interpreters-regex
+  (concat "\\s-*" (regexp-opt smart-mode-dialect-interpreters 'words))
+  "")
+
+(defconst smart-mode-dialect-modifiers-regex
+  (concat "\\s-*\\(plain\\|docksh\\)\\s-+" (regexp-opt smart-mode-dialects 't))
+  "")
+
 (defconst smart-mode-dialect-regexs
-  `(,(format "(\\s-*\\(?:plain\\|docksh\\)\\s-+%s\\s-*)"
-             (regexp-opt smart-mode-dialects t))
-    ,(format "(\\s-*%s.*?)"
-             (regexp-opt smart-mode-dialect-interpreters t)))
+  `(,(concat "(" smart-mode-dialect-modifiers-regex "\\s-*)")
+    ,(concat "(" smart-mode-dialect-interpreters-regex ".*?)"))
   "Supported dialects regexps by smart.")
 
 (defconst smart-mode-statement-keywords
@@ -91,6 +108,14 @@
 (defconst smart-mode-statements
   (concat "^\\s-*" (regexp-opt smart-mode-statement-keywords 'words))
   "Regex to match keywords understood by smart as statements.")
+
+(defconst smart-mode-builtin-names
+  `("print" "println" "dir" "dirdir" "basename" "base64")
+  "List of names understood by smart as builtins.")
+
+(defconst smart-mode-builtins
+  (regexp-opt smart-mode-builtin-names 'words)
+  "Regex to match builtin names understood by smart.")
 
 (defconst smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 
@@ -260,13 +285,7 @@
 
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar smart-mode-scan-properties
-  (list 'project 'define
-        'rule-target-list
-        'rule-dependency-list
-        'modifier-list 'modifier
-        'recipe 'recipe-prefix 'recipe-dialect
-        'smart-token 'smart-semantic 'smart-dialect
-        'syntax-table)
+  (list 'smart-semantic 'smart-dialect 'syntax-table)
   "Text properties used for code regions/tokens.")
 
 (defvar smart-mode-syntax-table
@@ -334,10 +353,10 @@
            ;;(put-text-property )
            (let ((pos (- beg 1)))
              (when (< (point-min) pos)
-               (smart-mode-debug-message "scan-region: recipe(%S) recipe-dialect(%S)"
-                                         (get-text-property pos 'recipe)
-                                         (get-text-property pos 'recipe-dialect))
-               (setq dialect (get-text-property pos 'recipe-dialect))))
+               (smart-mode-debug-message "scan-region: sementic(%S) dialect(%S)"
+                                         (get-text-property pos 'smart-semantic)
+                                         (get-text-property pos 'smart-dialect))
+               (setq dialect (get-text-property pos 'smart-dialect))))
            (if (null dialect)
                (smart-mode-default-scan beg end)
              (if (string-equal dialect "") (setq dialect "internal"))
@@ -376,33 +395,44 @@
 ;;  (put-text-property end (1- end) 'syntax-table (string-to-syntax "|"))
 (defun smart-mode-default-scan (beg end)
   (save-excursion
-    (let (mb me ms eol)
+    (let (mb me ms dialect syntaxs closers parens ctxs drop)
       (remove-list-of-text-properties beg end '(font-lock-face face))
       (goto-char beg) ;; start from the beginning
       (while (< (point) end)
+        (setq drop nil)
         (cond
          
+         ((looking-at comment-start) ;; #
+          (setq mb (match-beginning 0) me (match-end 0) drop mb)
+          (put-text-property mb me 'syntax-table (string-to-syntax "<"))
+          (smart-mode-end-of-line) ;; goto the end of comment
+          (setq me (point)) ;; end position of comment
+          (put-text-property me me 'syntax-table (string-to-syntax ">"))
+          (put-text-property mb me 'font-lock-face 'font-lock-comment-face)
+          (put-text-property mb me 'smart-semantic 'comment))
+
          ((looking-at smart-mode-statements)
-          (setq mb (match-beginning 0)
-                me (match-end 0)
-                ms (match-string 0))
-          (put-text-property mb me 'smart-token ms)
+          (setq mb (match-beginning 0) me (match-end 0)
+                ms (match-string 0) drop mb)
           (put-text-property mb me 'font-lock-face 'font-lock-keyword-face)
+          (put-text-property mb me 'smart-semantic ms)
           (goto-char me) ;; skip matched
           ;; FIXME: using (skip-syntax-forward (string-to-syntax "<>"))
-          (skip-chars-forward smart-mode-inline-space)
+          ;; skip spaces after the keyword
+          (skip-chars-forward "[ \t]")
           (cond
            ((string= ms "project")
             (cond ;; project name
              ((looking-at smart-mode-project-name-regex)
-              (setq mb (match-beginning 0)
-                    me (match-end 0)
-                    ms (match-string 0))
-              (goto-char me) ;; skip name
-              (put-text-property mb me 'smart-token "bareword")
-              (put-text-property mb me 'smart-semantic "proname")
-              (put-text-property mb me 'font-lock-face 'font-lock-type-face))
-             (t (message "ERROR: "))))
+              (setq mb (match-beginning 1) me (match-end 1)
+                    ms (match-string 1))
+              (put-text-property mb me 'font-lock-face 'font-lock-type-face)
+              (put-text-property mb me 'smart-semantic 'proname)
+              (goto-char me))
+             (t ;; highlight illegal project name
+              (setq mb (point) me (line-end-position))
+              (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
+              (goto-char me))))
            ((string= ms "import")
             )
            ((string= ms "use")
@@ -410,16 +440,57 @@
            ((string= ms "files")
             )
            ((string= ms "eval")
-            )
-           (t (goto-char (match-end 0)))))
+            (cond ;; builtin name
+             ((looking-at smart-mode-builtins)
+              (setq mb (match-beginning 1) me (match-end 1))
+              (put-text-property mb me 'font-lock-face 'font-lock-builtin-face)
+              (goto-char (match-end 0)))
+             ;; highlight unknown names
+             ((looking-at "\\(\\(?:\\w\\|-\\|+\\)+\\)")
+              (setq mb (match-beginning 1) me (match-end 1))
+              (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
+              (goto-char (match-end 0)))))))
 
-         ((looking-at comment-start) ;; #
+         ((looking-at "\\(\\\\\\)\\(.\\|$\\)")
+          (setq mb (match-beginning 1) me (match-end 1)
+                ms (match-string 1))
+          ;; TODO: highlight invalid escapes
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (goto-char (1+ (match-end 0))))
+        
+         ((looking-at "(")
           (setq mb (match-beginning 0) me (match-end 0))
-          (put-text-property mb me 'syntax-table (string-to-syntax "<"))
-          (smart-mode-end-of-line) ;; goto the end of comment
-          (setq me (point)) ;; end position of comment
-          (put-text-property me me 'syntax-table (string-to-syntax ">"))
-          (put-text-property mb me 'font-lock-face 'font-lock-comment-face))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+          (push ?\( parens) (forward-char)
+          (when (equal (car ctxs) ?\[)
+            (cond ((looking-at smart-mode-dialect-interpreters-regex)
+                   (setq mb (match-beginning 1) me (match-end 1)
+                         dialect (match-string 1))
+                   (put-text-property mb me 'font-lock-face 'font-lock-preprocessor-face)
+                   (goto-char (match-end 0)))
+                  ((looking-at smart-mode-dialect-modifiers-regex)
+                   (setq mb (match-beginning 1) me (match-end 1))
+                   (put-text-property mb me 'font-lock-face 'font-lock-builtin-face)
+                   (setq mb (match-beginning 2) me (match-end 2) dialect (match-string 1))
+                   (put-text-property mb me 'font-lock-face 'font-lock-keyword-face)
+                   (goto-char (match-end 0)))
+                  ((looking-at smart-mode-modifiers-regex)
+                   (setq mb (match-beginning 1) me (match-end 1))
+                   (put-text-property mb me 'font-lock-face 'font-lock-builtin-face)
+                   (goto-char (match-end 0)))
+                  ;; highlight unknown modifiers
+                  ((looking-at "\\(\\(?:\\w\\|-\\|+\\)+\\)")
+                   (setq mb (match-beginning 1) me (match-end 1))
+                   (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
+                   (goto-char (match-end 0))))))
+
+         ((and (not (member (car syntaxs) '(?$ ?,))) (looking-at ")"))
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (put-text-property mb me 'syntax-table (string-to-syntax ")("))
+          (pop parens)
+          (forward-char))
          
          ((looking-at "'") ;; FIXME: quote pairing is buggy
           (setq mb (match-beginning 0) me (match-end 0))
@@ -451,38 +522,134 @@
           (put-text-property mb me 'font-lock-face 'font-lock-string-face))
 
          ((looking-at "\\$\\([({]?\\)")
-          (let ((lpos (point)) (lpar (match-string 1)))
-            ;; TODO: scan calls
-            (message "call: %s" (match-string 1))
-            )
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (let* ((pos (match-end 0)) (lpar (match-string 1)))
+            (cond ((string= lpar "(")
+                   (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+                   (push (cons ")" pos) closers))
+                  ((string= lpar "{")
+                   (put-text-property mb me 'syntax-table (string-to-syntax "(}"))
+                   (push (cons "}" pos) closers))
+                  (t
+                   (push (cons "\\(:\\s.\\|\\s-\\|[ \t\n]\\)" pos) closers)))
+            (push ?$ syntaxs)
+            (goto-char pos)))
+
+         ;; check call closers, e.g. $(name)
+         ((and syntaxs (char-equal ?$ (car syntaxs))
+               closers (looking-at (caar closers)))
+          (setq mb (cdar closers) me (match-beginning 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (pop syntaxs) (pop closers)
           (goto-char (match-end 0)))
+
+         ;; check arguments for calls, e.g. $(fun ...
+         ((and syntaxs (char-equal ?$ (car syntaxs))
+               closers (string-match-p "^[)}]$" (caar closers))
+               (looking-at "[ \t]"))
+          (setq mb (cdar closers) me (match-beginning 0))
+          (if (save-excursion (goto-char mb) (looking-at-p smart-mode-builtins))
+              (put-text-property mb me 'font-lock-face 'font-lock-builtin-face)
+            (put-text-property mb me 'font-lock-face 'font-lock-function-name-face))
+          (setcar syntaxs ?,) ;; switch into argumented calls
+          (goto-char (setcdr (car closers) (match-end 0))))
+
+         ;; check closers for argumented calls
+         ((and syntaxs (char-equal ?, (car syntaxs))
+               closers (looking-at (caar closers)))
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (pop syntaxs) (pop closers)
+          (goto-char (match-end 0)))
+
+         ;; terminates modifiers
+         ((and syntaxs (char-equal ?\[ (car syntaxs))
+               (looking-at "\\]"))
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (pop syntaxs) (pop ctxs) ;; ends modifiers
+          (goto-char me)
+          (cond ((looking-at "[ \t]*$")
+                 (push ?\t syntaxs) ;; recipe
+                 (goto-char (1+ (match-end 0))))
+                ((looking-at "[ \t]*\\([:]\\)")
+                 (setq mb (match-beginning 1) me (match-end 1))
+                 (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+                 (push ?: syntaxs) ;; modifiers
+                 (goto-char (match-end 0)))))
+         
+         ;; ;; starts deppendent targets
+         ;; ((and syntaxs (char-equal ?: (car syntaxs))
+         ;;       (looking-at "[ \t]*$"))
+         ;;  (push ?\t syntaxs) ;; recipe
+         ;;  (goto-char (1+ (match-end 0))))
+
+         ((and syntaxs (char-equal ?\t (car syntaxs))
+               (looking-at smart-mode-recipe-regex))
+          (message "recipe:%s: %s" dialect (match-string 2))
+          (setq drop (match-beginning 0)) ;; should drop unclosed calls
+          (let ((eol (match-end 0)))
+            (smart-put-recipe-overlays (point) (1+ eol))
+            (put-text-property (1+ (point)) eol 'smart-dialect dialect)
+            (goto-char (match-end 1))
+            ;; TODO: scan dialect recipes
+            (goto-char (1+ eol)) ;; next recipe
+            (unless (looking-at-p "^\t")
+              (setq dialect nil) (pop syntaxs))))
+         
+         ;; Eol terminates many syntax.
+         ((and syntaxs (looking-at "$"))
+          (let ((s (car syntaxs)))
+            (cond ((char-equal s ?=)
+                   (pop syntaxs))
+                  ((char-equal s ?:)
+                   (pop syntaxs)
+                   (push ?\t syntaxs)) ;; recipe
+                  ((char-equal s ?\t)
+                   (pop syntaxs))))
+          (forward-char))
 
          ((looking-at smart-mode-defineassign-regex)
-          (setq mb (match-beginning 1) me (match-end 1))
+          (setq mb (match-beginning 1) me (match-end 1) drop mb)
           (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
+          (put-text-property mb me 'smart-semantic 'define-name)
           (setq mb (match-beginning 2) me (match-end 2))
-          (put-text-property mb me 'font-lock-face 'font-lock-type-face)
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (push ?= syntaxs) ;; assign
           (goto-char (match-end 0)))
 
-         ;; ;; TODO: don't use `smart-mode-match-dependency'
-         ;; ((smart-mode-match-dependency (setq eol (smart-mode-line-end-position)))
-         ;;  (setq mb (match-beginning 1) me (match-end 1))
-         ;;  (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
-         ;;  (goto-char eol))
          ((looking-at smart-mode-dependency-regex)
-          (setq mb (match-beginning 1) me (match-end 1))
+          (setq mb (match-beginning 1) me (match-end 1) drop (match-beginning 0))
           (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
-          (let ((eol (smart-mode-line-end-position)) (dialect (smart-mode-scan-dependency-dialect eol)))
-            (while (progn (goto-char eol) (beginning-of-line 2)
-                          (setq eol (smart-mode-line-end-position))
-                          (looking-at "^\\(\t\\)\\(\\(:\\\\\n\\|.\\)*\\)$"))
-              (message "recipe: %s" (match-string 2))
-              (smart-put-recipe-overlays (point) (+ (point) 1))
-              (put-text-property (1+ (point)) eol 'recipe-dialect dialect)
-              ;; TODO: scan dialect recipes
-              )))
+          (put-text-property mb me 'smart-semantic 'dependency)
+          (setq mb (match-beginning 2) me (match-end 2))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (goto-char (match-end 0))
+          (cond ((looking-at "[ \t]*$")
+                 (push ?\t syntaxs) ;; recipe
+                 (goto-char (1+ (match-end 0))))
+                ((looking-at "[ \t]*\\(\\[\\)")
+                 (setq mb (match-beginning 1) me (match-end 1))
+                 (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+                 (push ?\[ syntaxs) ;; modifiers
+                 (push ?\[ ctxs)
+                 (goto-char (match-end 0)))))
          
-         (t (forward-char)))))))
+         (t (forward-char)))
+
+        ;; drop unclosed calls and highlight error.
+        (when (and drop (member (car syntaxs) '(?$ ?,)))
+          (message "drop: %S %S" syntaxs closers)
+          ;; highlight unbalanced calls
+          (setq mb (cdar closers)
+                me (if (integer-or-marker-p drop) drop
+                     (point)))
+          (when (and mb me)
+            (put-text-property mb me 'font-lock-face 'font-lock-warning-face))
+          (pop syntaxs) (pop closers))))))
 
 (defun smart-mode-default-scan-deprecated (beg end)
   (save-excursion
@@ -504,7 +671,7 @@
           (let ((bol (point)))
             ;;(message "recipe:%S" (buffer-substring bol eol))
             (smart-put-recipe-overlays bol (+ eol 1))
-            (put-text-property (+ bol 1) eol 'recipe-dialect dialect)
+            (put-text-property (+ bol 1) eol 'smart-dialect dialect)
             ;; TODO: scan dialect recipes
             ))))))
 
@@ -530,7 +697,7 @@ The anchor must have matched the opening parens in the first group."
 		      ((string= s "[[") "]]")))
 	(re-search-forward (concat "\\(.*\\)[ \t]*" s) (line-end-position) t))))
 
-(defun smart-mode-match-dependency (bound)
+(defun smart-mode-match-dependency (bound) ; see `makefile-match-dependency'
   "Search for `smart-mode-dependency-regex' up to BOUND.
 Checks that the colon has not already been fontified, else we
 matched in a rule action."
@@ -607,7 +774,7 @@ matched in a rule action."
       (goto-char pt)
       nil)))
 
-(defun smart-mode-previous-dependency ()
+(defun smart-mode-previous-dependency--deprecated ()
   "Move point to the beginning of the previous dependency line.
 Returns `t' if there's a previous dependency line, or nil."
   (interactive)
@@ -617,7 +784,7 @@ Returns `t' if there's a previous dependency line, or nil."
                    (unless (smart-mode-previous-dependency-inner)
                      (goto-char pos) (setq continue nil)))))))
 
-(defun smart-mode-next-dependency ()
+(defun smart-mode-next-dependency--deprecated ()
   "Move point to the beginning of the next dependency line.
 Returns `t' if there's a next dependency line, or nil."
   (interactive)
@@ -626,6 +793,37 @@ Returns `t' if there's a next dependency line, or nil."
         (prog1 t (while (and continue (looking-at-p "^\t"))
                    (unless (smart-mode-next-dependency-inner)
                      (goto-char pos) (setq continue nil)))))))
+
+(defun smart-mode-previous-dependency ()
+  "Move point to the beginning of the previous dependency line.
+Returns `t' if there's a previous dependency line, or nil."
+  (interactive)
+  (let (pos)
+    (save-excursion
+      (while (and (< (point-min) (point)) (not pos))
+        (beginning-of-line 0) ;; next (N-1) lines
+        (when (and (re-search-forward "[^ \t]" (line-end-position) t)
+                   (equal (get-text-property (match-beginning 0) 'smart-semantic)
+                          'dependency))
+          (setq pos (match-beginning 0)))
+        ;; move back to the beginning to avoid dead loop
+        (beginning-of-line)))
+    (if pos (goto-char pos))))
+
+(defun smart-mode-next-dependency ()
+  "Move point to the beginning of the next dependency line.
+Returns `t' if there's a next dependency line, or nil."
+  (interactive)
+  (let (pos)
+    (save-excursion
+      (while (and (< (point) (point-max)) (not pos))
+        (beginning-of-line 2) ;; next (N-1) lines
+        ;;(message "next: %S %S" (point) (point-max))
+        (when (and (re-search-forward "[^ \t\n]" (line-end-position) t)
+                   (equal (get-text-property (point) 'smart-semantic)
+                          'dependency))
+          (setq pos (match-beginning 0)))))
+    (if pos (goto-char pos))))
 
 (defun smart-mode-tab-it ()
   (interactive)
@@ -677,7 +875,7 @@ Returns `t' if there's a next dependency line, or nil."
     ;;(smart-mode-debug-message (format "recipe: %s" (buffer-substring bor (- eol 1))))
     t))
 
-(defun smart-mode-scan-buffer ()
+(defun smart-mode-scan-buffer--deprecated ()
   "Scan entine buffer."
   (interactive)
   (smart-mode-scan-region (point-min) (point-max)))
@@ -707,7 +905,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-invalidate-region (beg end)
   ;; TODO: decide invalidate range (beg, end) according to the dialect
-  (let ((dialect (get-text-property beg 'recipe-dialect)) (func1) (func2))
+  (let ((dialect (get-text-property beg 'smart-dialect)) (func1) (func2))
     (if (or (null dialect) (string-equal dialect "none")) 
         (setq dialect "default"))
     (setq func1 (intern-soft (format "smart-mode-invalidate-%s-region-beginning-position" dialect)))
@@ -813,7 +1011,6 @@ Returns `t' if there's a next dependency line, or nil."
   (make-local-variable 'indent-line-function)
 
   (setq font-lock-defaults `(smart-mode-font-lock-keywords t)
-        ;;font-lock-defaults `(smart-mode-font-lock-keywords ,@(cdr font-lock-defaults))
         font-lock-unfontify-region-function 'smart-mode-unfontify-region
         font-lock-extend-region-functions '(smart-mode-extend-region)
         font-lock-support-mode nil ;; avoid any conflicts
@@ -849,15 +1046,15 @@ Returns `t' if there's a next dependency line, or nil."
     (font-lock-fontify-region (point-min) (point-max))))
 
 (defun smart-mode-font-lock-highlight (limit)
-  (smart-mode-debug-message "font-lock-highlight: point(%S) limit(%S) fl-beg(%S) f-end(%S) change-beg(%S) change-end(%S)"
-                            (point) limit font-lock-beg font-lock-end
-                            smart-mode-change-beg smart-mode-change-end)
+  ;; (smart-mode-debug-message "font-lock-highlight: point(%S) limit(%S) fl-beg(%S) f-end(%S) change-beg(%S) change-end(%S)"
+  ;;                           (point) limit font-lock-beg font-lock-end
+  ;;                           smart-mode-change-beg smart-mode-change-end)
   (unless smart-mode-inhibit-fontification
     (smart-mode-highlight-region (point) limit))
   nil)
 
 (defun smart-mode-highlight-region (&optional beg end)
-  (smart-mode-debug-message "highlight-region: beg(%S) end(%S)" beg end)
+  ;;(smart-mode-debug-message "highlight-region: beg(%S) end(%S)" beg end)
   ;;(smart-mode-highlight-default beg end)
   nil)
 
@@ -877,7 +1074,7 @@ Returns `t' if there's a next dependency line, or nil."
              (smart-mode-highlight-default pos (point))
              (while (progn (beginning-of-line 2) (looking-at-p "^\t"))
                (setq bor (+ (point) 1)) ;; beginning of recipe
-               (let ((dialect (get-text-property bor 'recipe-dialect)))
+               (let ((dialect (get-text-property bor 'smart-dialect)))
                  ;;(smart-mode-debug-message "recipe-dialect: %S" dialect)
                  (smart-mode-end-of-line)
                  ;; highlight recipe dialect
