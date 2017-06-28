@@ -396,7 +396,7 @@
 (defun smart-mode-default-scan (beg end)
   (save-excursion
     (let (mb me ms dialect syntaxs closers parens ctxs drop)
-      (remove-list-of-text-properties beg end '(font-lock-face face))
+      (remove-list-of-text-properties beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (goto-char beg) ;; start from the beginning
       (while (< (point) end)
         (setq drop nil)
@@ -589,7 +589,7 @@
 
          ((and syntaxs (char-equal ?\t (car syntaxs))
                (looking-at smart-mode-recipe-regex))
-          (message "recipe:%s: %s" dialect (match-string 2))
+          ;;(message "recipe:%s: %s" dialect (match-string 2))
           (setq drop (match-beginning 0)) ;; should drop unclosed calls
           (let ((eol (match-end 0)))
             (smart-put-recipe-overlays (point) (1+ eol))
@@ -612,6 +612,7 @@
                    (pop syntaxs))))
           (forward-char))
 
+         ;; TODO: get rid of smart-mode-defineassign-regex
          ((looking-at smart-mode-defineassign-regex)
           (setq mb (match-beginning 1) me (match-end 1) drop mb)
           (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
@@ -621,6 +622,7 @@
           (push ?= syntaxs) ;; assign
           (goto-char (match-end 0)))
 
+         ;; TODO: get rid of smart-mode-dependency-regex
          ((looking-at smart-mode-dependency-regex)
           (setq mb (match-beginning 1) me (match-end 1) drop (match-beginning 0))
           (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
@@ -632,7 +634,8 @@
                  (push ?\t syntaxs) ;; recipe
                  (goto-char (1+ (match-end 0))))
                 ((looking-at "[ \t]*\\(\\[\\)")
-                 (setq mb (match-beginning 1) me (match-end 1))
+                 (setq mb (match-beginning 1) me (match-end 1)
+                       drop (match-beginning 0))
                  (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
                  (push ?\[ syntaxs) ;; modifiers
                  (push ?\[ ctxs)
@@ -642,13 +645,14 @@
 
         ;; drop unclosed calls and highlight error.
         (when (and drop (member (car syntaxs) '(?$ ?,)))
-          (message "drop: %S %S" syntaxs closers)
+          (message "drop: %S %S %S [%S]" drop syntaxs closers '(?$ ?,))
           ;; highlight unbalanced calls
           (setq mb (cdar closers)
                 me (if (integer-or-marker-p drop) drop
                      (point)))
           (when (and mb me)
-            (put-text-property mb me 'font-lock-face 'font-lock-warning-face))
+            (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
+            (put-text-property mb me 'smart-semantic 'error))
           (pop syntaxs) (pop closers))))))
 
 (defun smart-mode-default-scan-deprecated (beg end)
