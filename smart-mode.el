@@ -357,6 +357,8 @@
 (defvar smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
 (defvar smart-mode-recipe-face 'smart-mode-recipe-face)
 
+(defvar smart-mode-default-indent 4)
+
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar smart-mode-scan-properties
   (list 'smart-semantic 'smart-dialect 'syntax-table)
@@ -383,8 +385,13 @@
 	(opt-map (make-sparse-keymap)))
     (define-key map "\M-p"     'smart-mode-previous-dependency)
     (define-key map "\M-n"     'smart-mode-next-dependency)
-    (define-key map "\n"       'smart-mode-newline) ;; C-j
-    (define-key map "\t"       'smart-mode-tab-it)  ;; C-i or <tab>
+    ;;(define-key map "\C-h"     'smart-mode-delete-backward-char) ;; <backspace>
+    (define-key map "\C-?"     'smart-mode-delete-backward-char) ;; <backspace>
+    (define-key map "\C-d"     'smart-mode-delete-forward-char) ;; <delete>
+    (define-key map "\C-k"     'smart-mode-kill-line) ;; kill to line end
+    (define-key map "\C-m"     'smart-mode-newline) ;; C-m
+    ;;(define-key map "\n"       'smart-mode-newline) ;; C-j
+    ;;(define-key map "\t"       'smart-mode-tab-it)  ;; C-i or <tab>
     map)
   "The keymap that is used in SMArt mode.")
 
@@ -491,10 +498,12 @@
 
 (defun smart-mode-default-scan (beg end &optional callonly)
   (save-excursion
-    (let (mb me ms dialect syntaxs closers parens ctxs drop)
+    (let (mb me ms dialect syntaxs closers parens ctxs drop 
+             indent indent-beg)
       (remove-list-of-text-properties
        beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (goto-char beg) ;; start from the beginning
+      (setq indent 0) ;; initialze indentation to zero
       (while (< (point) end)
         (setq drop nil)
         (cond
@@ -555,12 +564,17 @@
           ;; TODO: highlight invalid escapes
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (goto-char (1+ (match-end 0))))
-        
+
+         ;; left-paren of group
          ((looking-at "(")
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (put-text-property mb me 'syntax-table (string-to-syntax "()"))
-          (push ?\( parens) (forward-char)
+          (when parens
+            (smart-mode-put-text-indent (or indent-beg me) mb indent))
+          (setq indent (+ indent smart-mode-default-indent)
+                indent-beg me)
+          (push (cons ?\( mb) parens) (forward-char)
           (when (equal (car ctxs) ?\[)
             (cond ((looking-at smart-mode-dialect-interpreters-regex)
                    (setq mb (match-beginning 1) me (match-end 1)
@@ -583,11 +597,15 @@
                    (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
                    (goto-char (match-end 0))))))
 
+         ;; right-paren of group
          ((and (not (member (car syntaxs) '(?$ ?,))) (looking-at ")"))
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (put-text-property mb me 'syntax-table (string-to-syntax ")("))
-          (pop parens)
+          (smart-mode-put-text-indent indent-beg mb indent)
+          (pop parens) ;; pop a openning paren 
+          (setq indent (- indent smart-mode-default-indent)
+                indent-beg (if parens me))
           (forward-char))
          
          ((looking-at "'") ;; FIXME: quote pairing is buggy
@@ -756,6 +774,10 @@
             (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
             (put-text-property mb me 'smart-semantic 'error))
           (pop syntaxs) (pop closers))))))
+
+(defun smart-mode-put-text-indent (beg end &optional indent)
+  (unless indent (setq indent smart-mode-default-indent))
+  (put-text-property beg end 'left-margin indent))
 
 (defun smart-mode-default-scan-deprecated (beg end)
   (save-excursion
@@ -947,17 +969,18 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-tab-it ()
   (interactive)
-  (cond
-   ((looking-at-p "^\t") (forward-char))
-   ((and (looking-at-p "^") (smart-can-add-recipe-p))
-    (smart-insert-mark-recipe "\t"))
-   ((save-excursion ;; If a dependency or assignment..
-      (or (smart-mode-match-dependency (smart-mode-line-end-position))
-          (progn (beginning-of-line) (looking-at-p "^[^\t].*?="))))
-    (indent-line-to 0))
-   (t (insert-string "\t"))))
+  ;; (cond
+  ;;  ((looking-at-p "^\t") (forward-char))
+  ;;  ((and (looking-at-p "^") (smart-can-add-recipe-p))
+  ;;   (smart-insert-mark-recipe "\t"))
+  ;;  ((save-excursion ;; If a dependency or assignment..
+  ;;     (or (smart-mode-match-dependency (smart-mode-line-end-position))
+  ;;         (progn (beginning-of-line) (looking-at-p "^[^\t].*?="))))
+  ;;   (indent-line-to 0))
+  ;;  (t (insert-string "\t")))
+  (message "todo: tab-it"))
 
-(defun smart-mode-newline ()
+(defun smart-mode-newline--deprecated ()
   (interactive)
   (cond
    ;;((looking-at-p "^[^\t]") (insert-string "\n"))
@@ -972,6 +995,67 @@ Returns `t' if there's a next dependency line, or nil."
     (smart-insert-mark-recipe "\n\t"))
    (t (insert-string "\n"))))
 
+(defun smart-mode-newline ()
+  (interactive)
+  (let ((is-eol (looking-at "$")) (pos (point)) 
+        (semantic) (dialect) (func))
+    (when is-eol (setq pos (1- pos)))
+    (setq semantic (get-text-property pos 'smart-semantic)
+          dialect (get-text-property pos 'smart-dialect))
+    (cond
+     ((equal semantic 'dialect)
+      (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
+      (if (and func (functionp func)) (funcall func is-eol)))
+     (is-eol
+      (cond
+       ((eq ?\\ (char-before))
+        (newline-and-indent) (save-excursion (insert-string " \\")))
+       ((let* ((pos (smart-mode-line-beginning-position))
+               (semantic (get-text-property pos 'smart-semantic)))
+          (equal semantic 'dependency))
+        ;; cleanup bad overlays at the end of dependency
+        (dolist (ovl (overlays-at (point)))
+          (let ((k (overlay-get ovl 'smart)))
+            (if (member k '(recipe-prefix recipe))
+                (delete-overlay ovl))))
+        ;; insert new recipe (\t) after dependency
+        (insert "\n\t"))
+       ((looking-at "^") ;; empty line, e.g. "^$"
+        (newline nil t)) ;;(insert-string "\n"))
+       ((looking-back (concat smart-mode-statements "?[ \t]*([ \t]*$"))
+        (newline-and-indent))
+       ;; open a new line in general
+       (t ;;(insert-string "\n") ;;(open-line 1) ;;(split-line)
+        (newline-and-indent))))
+     (t (newline-and-indent)))))
+
+(defun smart-mode-internal-recipe-newline (&optional is-eol)
+  (message "todo: newline") (beep))
+(defun smart-mode-c-recipe-newline (&optional is-eol)
+  (message "todo: newline for c") (beep))
+(defun smart-mode-c++-recipe-newline (&optional is-eol)
+  (message "todo: newline for c++") (beep))
+(defun smart-mode-shell-recipe-newline (&optional is-eol)
+  (message "todo: newline for shell") (beep))
+(defun smart-mode-python-recipe-newline (&optional is-eol)
+  (message "todo: newline for python") (beep))
+(defun smart-mode-perl-recipe-newline (&optional is-eol)
+  (message "todo: newline for perl") (beep))
+(defun smart-mode-lua-recipe-newline (&optional is-eol)
+  (message "todo: newline for lua") (beep))
+
+(defun smart-mode-delete-backward-char () ;; see `delete-backward-char'
+  (interactive)
+  (delete-backward-char 1))
+
+(defun smart-mode-delete-forward-char () ;; see `delete-forward-char'
+  (interactive)
+  (delete-forward-char 1))
+
+(defun smart-mode-kill-line ()
+  (interactive)
+  (kill-line))
+
 (defun smart-insert-mark-recipe (s)
   (if s (insert-string s))
   (smart-put-recipe-overlays (line-beginning-position)
@@ -983,10 +1067,12 @@ Returns `t' if there's a next dependency line, or nil."
     ;;(dolist (ovl (overlays-at bor)) (message "put-recipe-overlays: 2.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     (unless ovl1 
       (setq ovl1 (make-overlay beg bor))
+      (overlay-put ovl1 'smart 'recipe-prefix)
       (overlay-put ovl1 'face smart-mode-recipe-indent-face)
       (overlay-put ovl1 'read-only t))
     (unless ovl2
       (setq ovl2 (make-overlay bor end))
+      (overlay-put ovl2 'smart 'recipe)
       (overlay-put ovl2 'face smart-mode-recipe-face))
     ;;(smart-mode-debug-message (format "recipe: %s" (buffer-substring bor (- eol 1))))
     t))
@@ -1111,12 +1197,18 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-debug-message "commeng-uncomment-region: beg(%S) end(%S) arg(%S)" beg end arg))
 
 (defun smart-mode-indent-line ()
-  (smart-mode-debug-message "indent-line: point(%S)" (point)))
+  (let ((this (save-excursion (back-to-indentation) (current-column)))
+        (last (save-excursion (backward-to-indentation) (current-column))))
+    (smart-mode-debug-message "indent-line: point(%S) this(%S) last(%S)"
+                              (point) this last)
+    (cond 
+     ((< this last) (indent-line-to last))
+     ((< 0 this) (back-to-indentation)))))
 
 (defun smart-mode-beginning-of-line (&optional n) ;; `beginning-of-line'
   (beginning-of-line n)
-  (while (eq ?\\ (char-before))
-    (beginning-of-line 2))
+  (while (eq ?\\ (char-before (1- (point))))
+    (beginning-of-line 0)) ;; forward (N-1) lines --> backward 1 line
   (point))
 
 (defun smart-mode-end-of-line (&optional n) ;; `end-of-line'
