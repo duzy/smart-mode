@@ -503,6 +503,11 @@
       (remove-list-of-text-properties
        beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (goto-char beg) ;; start from the beginning
+      
+      ;; extending a single ")"
+      (when (and (eq 1 (- end beg)) (looking-at ")"))
+        (goto-char end))
+      
       (setq indent 0) ;; initialze indentation to zero
       (while (< (point) end)
         (setq drop nil)
@@ -570,8 +575,8 @@
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (put-text-property mb me 'syntax-table (string-to-syntax "()"))
-          (when parens
-            (smart-mode-put-text-indent (or indent-beg me) mb indent))
+          (when (and parens indent-beg)
+            (smart-mode-put-text-indent indent-beg mb indent))
           (setq indent (+ indent smart-mode-default-indent)
                 indent-beg me)
           (push (cons ?\( mb) parens) (forward-char)
@@ -602,10 +607,14 @@
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (put-text-property mb me 'syntax-table (string-to-syntax ")("))
-          (smart-mode-put-text-indent indent-beg mb indent)
+          (if (and indent-beg (< 0 indent))
+              (smart-mode-put-text-indent indent-beg mb indent)
+            (message "%s %s" indent indent-beg)
+            ;; this could be extending a ")" character
+            (smart-mode-put-text-indent mb me (- indent smart-mode-default-indent)))
           (pop parens) ;; pop a openning paren 
           (setq indent (- indent smart-mode-default-indent)
-                indent-beg (if parens me))
+                indent-beg (if parens mb))
           (forward-char))
          
          ((looking-at "'") ;; FIXME: quote pairing is buggy
@@ -1089,6 +1098,8 @@ Returns `t' if there's a next dependency line, or nil."
       (setq smart-mode-change-beg font-lock-beg))
     (when (or (null smart-mode-change-end) (> font-lock-end smart-mode-change-end))
       (setq smart-mode-change-end font-lock-end))
+    ;;(smart-mode-debug-message "extend-region: (%s)"
+    ;;                          (buffer-substring smart-mode-change-beg smart-mode-change-end))
     (let ((region (smart-mode-propertize smart-mode-change-beg smart-mode-change-end)))
       (when region
         ;;(smart-mode-debug-message "extend-region: propertized(%S)" region)
@@ -1122,15 +1133,25 @@ Returns `t' if there's a next dependency line, or nil."
     (if (< beg end) (smart-mode-scan-region beg end))))
 
 (defun smart-mode-invalidate-default-range (beg end)
+  (smart-mode-debug-message "invalidate-region: default(%s)" 
+                            (buffer-substring beg end))
   (save-excursion
-    (goto-char beg) ;; the beginning
+    (goto-char beg) ;; the beginning of range
     (smart-mode-beginning-of-line)
-    (if (and (equal (get-text-property (point) 'smart-semantic) 'dialect)
-             (looking-at "^\t"))
-        (setq beg (1+ (point))) (setq beg (point)))
-    (goto-char end) ;; the end
-    (if (looking-at "^") (forward-char -1)
-      (smart-mode-end-of-line))
+    (cond 
+     ((and (equal (get-text-property (point) 'smart-semantic) 'dialect)
+           (looking-at "^\t"))
+      (forward-char))
+     ((looking-at "[ \t]*\\()\\)")
+      (smart-mode-goto-open-paren (point-min) (match-beginning 1))))
+    (setq beg (point))
+    
+    (goto-char end) ;; the end of range
+    (cond 
+     ((looking-at "^") (backward-char))
+     ((looking-at "\\()\\)[ \t]*$") nil)
+     (t
+      (smart-mode-end-of-line)))
     (setq end (point)))
   (cons beg end))
 
@@ -1140,7 +1161,7 @@ Returns `t' if there's a next dependency line, or nil."
     (smart-mode-beginning-of-line)
     (setq beg (1+ (point)))
     (goto-char end) ;; the end of recipe
-    (if (looking-at "^") (forward-char -1)
+    (if (looking-at "^") (backward-char)
       (smart-mode-end-of-line))
     (setq end (point)))
   ;; (message "invalidate: semantic(%s) recipe(%s)"
@@ -1196,14 +1217,66 @@ Returns `t' if there's a next dependency line, or nil."
 (defun smart-mode-comment-uncomment-region (beg end &optional arg)
   (smart-mode-debug-message "commeng-uncomment-region: beg(%S) end(%S) arg(%S)" beg end arg))
 
+(defun smart-mode-goto-open-paren--deprecated (pos)
+  (catch 'break
+    (let ((ub (point-min)) (bound (1- pos)) (lp) (rp))
+      (while (setq lp (search-backward "(" ub t))
+        (save-excursion
+          (setq rp (search-forward ")" bound t))
+          (message "(%s %s" rp bound)
+          (if rp (setq bound (1- lp))
+            (throw 'break t)))
+        (if (< ub lp) (throw 'break nil)
+          (goto (1- lp)))))))
+
+(defun smart-mode-goto-open-paren (bound end)
+  "Goto the openning \"(\""
+  (catch 'break
+    (let ((rp) (result))
+      (while (search-backward "(" bound t)
+        (save-excursion
+          (if rp (goto-char rp))
+          (if (search-forward ")" end t) (setq rp (point))
+            (throw 'break t)))))))
+
+(defun smart-mode-goto-close-paren (pos)
+  "Goto the closing \")\""
+  (catch 'break
+    ;; TODO: find the close paren
+    ))
+
 (defun smart-mode-indent-line ()
-  (let ((this (save-excursion (back-to-indentation) (current-column)))
-        (last (save-excursion (backward-to-indentation) (current-column))))
-    (smart-mode-debug-message "indent-line: point(%S) this(%S) last(%S)"
-                              (point) this last)
+  ;; (let ((lm (current-left-margin))
+  ;;       (this (save-excursion (back-to-indentation) (current-column)))
+  ;;       (last (save-excursion (backward-to-indentation) (current-column))))
+  ;;   (smart-mode-debug-message "indent-line: point(%S) lm(%S) this(%S) last(%S)"
+  ;;                             (point) lm this last)
+  ;;   (cond
+  ;;    ((looking-back "[ \t]*)[ \t]*") nil)
+  ;;    ((< 0 lm) (indent-line-to lm))
+  ;;    ((< this last) (indent-line-to last))
+  ;;    ((< 0 this) (back-to-indentation))))
+  (let ((lm (current-left-margin)))
     (cond 
-     ((< this last) (indent-line-to last))
-     ((< 0 this) (back-to-indentation)))))
+
+     ;; indenting a line starting with ")"
+     ((or (looking-at "[ \t]*\\()\\)")
+          (looking-back "^[ \t]*\\()\\)[ \t]*"))
+      (let ((bound (point-min)) (indent) (lp) (rp (match-end 1)))
+        (save-excursion
+          (when (smart-mode-goto-open-paren bound (match-beginning 1))
+            (if (save-excursion (beginning-of-line)
+                                (looking-at smart-mode-statements))
+                (setq lp (point) indent 0)
+              (setq lp (point) indent (current-column)))))
+        (if (null indent) (back-to-indentation)
+          ;;(put-text-property (1+ lp) rp 'left-margin 
+          ;;                   (+ indent smart-mode-default-indent))
+          (indent-line-to indent))))
+     
+     ;; TODO: other indentation cases
+     (t
+      (back-to-indentation)))))
 
 (defun smart-mode-beginning-of-line (&optional n) ;; `beginning-of-line'
   (beginning-of-line n)
@@ -1302,7 +1375,8 @@ Returns `t' if there's a next dependency line, or nil."
         (str))
     (setq str (format "[point=%S semantic=%S dialect=%S]\n"
                       (point) semantic dialect))
-    (dolist (symbol (append smart-mode-scan-properties '(font-lock-face face)))
+    (dolist (symbol (append smart-mode-scan-properties
+                            '(font-lock-face face left-margin)))
       (when symbol
         (setq str (concat str (format "%s(%S) " (symbol-name symbol) (get-text-property (point) symbol))))))
     (message "%s\n" str)
