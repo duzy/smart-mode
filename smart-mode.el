@@ -503,10 +503,19 @@
       (remove-list-of-text-properties
        beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (goto-char beg) ;; start from the beginning
-      
-      ;; extending a single ")"
-      (when (and (eq 1 (- end beg)) (looking-at ")"))
-        (goto-char end))
+
+      (message "default-scan: (%s)" (buffer-substring beg end))
+      ;; extending single character
+      (when (eq 1 (- end beg))
+        (cond
+         ;; extending a single ")"
+         ((looking-at ")")
+          (goto-char end))
+
+         ;; extending a single "\n"
+         ((looking-at "\n")
+          (smart-mode-remove-recipe-overlays (point))
+          (goto-char end))))
       
       (setq indent 0) ;; initialze indentation to zero
       (while (< (point) end)
@@ -696,6 +705,7 @@
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (pop syntaxs) (pop ctxs) ;; ends modifiers
+          (smart-mode-remove-recipe-overlays (1- me))
           (goto-char me)
           (cond ((looking-at "[ \t]*$")
                  (push ?\t syntaxs) ;; recipe
@@ -718,7 +728,7 @@
           (setq mb (match-beginning 0) me (match-end 0)
                 drop mb) ;; should drop unclosed calls
           (let ((bol mb) (eol me))
-            (smart-put-recipe-overlays bol (1+ eol))
+            (smart-mode-put-recipe-overlays bol (1+ eol))
             (setq mb (match-beginning 1) me (match-end 1))
             ;;(put-text-property mb me 'smart-semantic 'recipe-prefix)
             (put-text-property mb eol 'smart-semantic 'dialect)
@@ -759,6 +769,7 @@
           (setq mb (match-beginning 2) me (match-end 2))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (goto-char (match-end 0))
+          (smart-mode-remove-recipe-overlays (1+ (point)))
           (cond ((looking-at "[ \t]*$")
                  (push ?\t syntaxs) ;; recipe
                  (goto-char (1+ (match-end 0))))
@@ -807,7 +818,7 @@
                       (looking-at-p "^\t"))
           (let ((bol (point)))
             ;;(message "recipe:%S" (buffer-substring bol eol))
-            (smart-put-recipe-overlays bol (+ eol 1))
+            (smart-mode-put-recipe-overlays bol (+ eol 1))
             (put-text-property (+ bol 1) eol 'smart-semantic 'dialect)
             (put-text-property (+ bol 1) eol 'smart-dialect dialect)
             ;; TODO: scan dialect recipes
@@ -1015,27 +1026,37 @@ Returns `t' if there's a next dependency line, or nil."
      ((equal semantic 'dialect)
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)))
+
+     ((save-excursion
+        (end-of-line)
+        (looking-back "\\\\$"))
+      (insert-string (if (looking-back "[ \t]") "\\" " \\"))
+      (newline-and-indent) (save-excursion (insert-string " ")))
+     
      (is-eol
       (cond
        ((eq ?\\ (char-before))
         (newline-and-indent) (save-excursion (insert-string " \\")))
+       
        ((let* ((pos (smart-mode-line-beginning-position))
                (semantic (get-text-property pos 'smart-semantic)))
           (equal semantic 'dependency))
         ;; cleanup bad overlays at the end of dependency
-        (dolist (ovl (overlays-at (point)))
-          (let ((k (overlay-get ovl 'smart)))
-            (if (member k '(recipe-prefix recipe))
-                (delete-overlay ovl))))
-        ;; insert new recipe (\t) after dependency
+        (smart-mode-remove-recipe-overlays (point))
+        ;; Insert new recipe (\t) after dependency
+        ;; Can't use '(newline) (insert "\t")' here!
         (insert "\n\t"))
+       
        ((looking-at "^") ;; empty line, e.g. "^$"
         (newline nil t)) ;;(insert-string "\n"))
+       
        ((looking-back (concat smart-mode-statements "?[ \t]*([ \t]*$"))
         (newline-and-indent))
+       
        ;; open a new line in general
        (t ;;(insert-string "\n") ;;(open-line 1) ;;(split-line)
         (newline-and-indent))))
+     
      (t (newline-and-indent)))))
 
 (defun smart-mode-internal-recipe-newline (&optional is-eol)
@@ -1067,10 +1088,16 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-insert-mark-recipe (s)
   (if s (insert-string s))
-  (smart-put-recipe-overlays (line-beginning-position)
+  (smart-mode-put-recipe-overlays (line-beginning-position)
                              (+ (smart-mode-line-end-position) 1)))
 
-(defun smart-put-recipe-overlays (beg end)
+(defun smart-mode-remove-recipe-overlays (pos)
+  (dolist (ovl (overlays-at pos))
+    (let ((k (overlay-get ovl 'smart)))
+      (if (member k '(recipe-prefix recipe))
+          (delete-overlay ovl)))))
+
+(defun smart-mode-put-recipe-overlays (beg end)
   (let ((bor (+ beg 1)) (ovl1) (ovl2)) ; bor: begin of recipe
     ;;(dolist (ovl (overlays-at beg)) (message "put-recipe-overlays: 1.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     ;;(dolist (ovl (overlays-at bor)) (message "put-recipe-overlays: 2.semantic(%S)" (overlay-get ovl 'smart-semantic)))
@@ -1246,16 +1273,6 @@ Returns `t' if there's a next dependency line, or nil."
     ))
 
 (defun smart-mode-indent-line ()
-  ;; (let ((lm (current-left-margin))
-  ;;       (this (save-excursion (back-to-indentation) (current-column)))
-  ;;       (last (save-excursion (backward-to-indentation) (current-column))))
-  ;;   (smart-mode-debug-message "indent-line: point(%S) lm(%S) this(%S) last(%S)"
-  ;;                             (point) lm this last)
-  ;;   (cond
-  ;;    ((looking-back "[ \t]*)[ \t]*") nil)
-  ;;    ((< 0 lm) (indent-line-to lm))
-  ;;    ((< this last) (indent-line-to last))
-  ;;    ((< 0 this) (back-to-indentation))))
   (let ((lm (current-left-margin)))
     (cond 
 
@@ -1273,10 +1290,16 @@ Returns `t' if there's a next dependency line, or nil."
           ;;(put-text-property (1+ lp) rp 'left-margin 
           ;;                   (+ indent smart-mode-default-indent))
           (indent-line-to indent))))
+
+     ;; indenting a continual line "\"
+     ((save-excursion
+        (beginning-of-line)
+        (looking-back "\\\\\n")) ;; previous line ends with "\\"
+      (indent-line-to smart-mode-default-indent))
      
      ;; TODO: other indentation cases
      (t
-      (back-to-indentation)))))
+      (indent-to-left-margin)))))
 
 (defun smart-mode-beginning-of-line (&optional n) ;; `beginning-of-line'
   (beginning-of-line n)
