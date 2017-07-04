@@ -105,8 +105,11 @@
     "include"  "eval" "export")
   "List of keywords understood by smart as statements.")
 
-(defconst smart-mode-statements
+(defconst smart-mode-statements--deprecated
   (concat "^\\s-*" (regexp-opt smart-mode-statement-keywords 'words))
+  "Regex to match keywords understood by smart as statements.")
+(defconst smart-mode-statements
+  (concat "\\s-*" (regexp-opt smart-mode-statement-keywords 'words))
   "Regex to match keywords understood by smart as statements.")
 
 (defconst smart-mode-builtin-names
@@ -502,25 +505,42 @@
   ;;(message "default-scan: (%s)" (buffer-substring beg end))
   (save-excursion
     (let (mb me ms dialect syntaxs closers parens ctxs drop 
-             indent indent-beg)
+             indent indent-beg bol)
       (remove-list-of-text-properties
        beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (goto-char beg) ;; start from the beginning
 
-      ;; extending single character
-      (when (eq 1 (- end beg))
-        (cond
-         ;; extending a single ")"
-         ((looking-at ")")
-          (goto-char end))
+      ;; ;; extending single character
+      ;; (when (eq 1 (- end beg))
+      ;;   (cond
+      ;;    ;; extending a single ")"
+      ;;    ((looking-at ")")
+      ;;     (goto-char end))
 
-         ;; extending a single "\n"
-         ((looking-at "\n")
-          (smart-mode-remove-recipe-overlays (point))
-          (goto-char end))))
+      ;;    ;; extending a single "\n"
+      ;;    ((looking-at "\n")
+      ;;     (smart-mode-remove-recipe-overlays (point))
+      ;;     (goto-char end))))
       
       (setq indent 0) ;; initialze indentation to zero
       (while (< (point) end)
+        (when (looking-back "^")
+          (setq bol (point))
+          ;;(message "bol: %d: %s" (point) (buffer-substring (point) (line-end-position)))
+          (unless (and syntaxs (eq ?^ (car syntaxs)))
+            (push ?^ syntaxs)))
+
+        (when (looking-at "$")
+          (let ((s (car syntaxs)))
+            (cond
+             ((char-equal s ?=)
+              (pop syntaxs))
+             ((char-equal s ?:)
+              (pop syntaxs)
+              (push ?\t syntaxs)) ;; recipe
+             ((char-equal s ?\t)
+              (smart-mode-remove-recipe-overlays (point))))))
+
         (setq drop nil)
         (cond
          
@@ -534,7 +554,8 @@
           (put-text-property mb me 'font-lock-face 'font-lock-comment-face)
           (put-text-property mb me 'smart-semantic 'comment))
 
-         ((looking-at smart-mode-statements)
+         ((and syntaxs (eq ?^ (car syntaxs))
+               (looking-at smart-mode-statements))
           (setq mb (match-beginning 0) me (match-end 0)
                 ms (match-string 0) drop mb)
           (put-text-property mb me 'font-lock-face 'font-lock-keyword-face)
@@ -741,40 +762,49 @@
             (goto-char (1+ eol)) ;; next recipe
             (unless (looking-at-p "^\\(?:\t\\|\\s-*#\\)")
               (setq dialect nil) (pop syntaxs))))
-         
-         ;; Eol terminates many syntax.
-         ((and syntaxs (looking-at "$"))
-          (let ((s (car syntaxs)))
-            (cond
-             ((char-equal s ?=)
-              (pop syntaxs))
-             ((char-equal s ?:)
-              (pop syntaxs)
-              (push ?\t syntaxs)) ;; recipe
-             ((char-equal s ?\t)
-              (smart-mode-remove-recipe-overlays (point)))
-             ))
-          (forward-char))
 
-         ;; TODO: get rid of smart-mode-defineassign-regex
-         ((looking-at smart-mode-defineassign-regex)
-          (setq mb (match-beginning 1) me (match-end 1) drop mb)
-          (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
-          (put-text-property mb me 'smart-semantic 'define-name)
-          (setq mb (match-beginning 2) me (match-end 2))
+         ((and syntaxs (eq ?^ (car syntaxs))
+               (looking-at "\\(!=\\|[*:+]?[:?]?=\\)"))
+          (setq mb (match-beginning 1) me (match-end 1))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (setq me (match-end 0))
+          (goto-char bol) ;; go back to the beginning of line
+          (when (looking-at "\\([^ \n\t][^:#= \t\n]*\\)")
+            (let ((a (match-beginning 1)) (b (match-end 1)))
+              (put-text-property a b 'font-lock-face 'font-lock-variable-name-face)
+              (put-text-property a b 'smart-semantic 'define-name)))
           (push ?= syntaxs) ;; assign
-          (goto-char (match-end 0)))
+          (goto-char me))
 
          ;; TODO: get rid of smart-mode-dependency-regex
-         ((looking-at smart-mode-dependency-regex)
-          (setq mb (match-beginning 1) me (match-end 1) drop (match-beginning 0))
-          (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
-          (put-text-property mb me 'smart-semantic 'dependency)
-          (setq mb (match-beginning 2) me (match-end 2))
+         ;; ((and nil (looking-at smart-mode-dependency-regex))
+         ;;  (setq mb (match-beginning 1) me (match-end 1) drop (match-beginning 0))
+         ;;  (put-text-property mb me 'font-lock-face 'smart-mode-targets-face)
+         ;;  (put-text-property mb me 'smart-semantic 'dependency)
+         ;;  (setq mb (match-beginning 2) me (match-end 2))
+         ;;  (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+         ;;  (goto-char (match-end 0))
+         ;;  (smart-mode-remove-recipe-overlays (1+ (point)))
+         ;;  (cond ((looking-at "[ \t]*$")
+         ;;         (push ?\t syntaxs) ;; recipe
+         ;;         (goto-char (1+ (match-end 0))))
+         ;;        ((looking-at "[ \t]*\\(\\[\\)")
+         ;;         (setq mb (match-beginning 1) me (match-end 1)
+         ;;               drop (match-beginning 0))
+         ;;         (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+         ;;         (push ?\[ syntaxs) ;; modifiers
+         ;;         (push ?\[ ctxs)
+         ;;         (goto-char (match-end 0)))))
+         ((and syntaxs (eq ?^ (car syntaxs)) (looking-at "\\([:]\\)"))
+          (setq mb (match-beginning 1) me (match-end 1))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-          (goto-char (match-end 0))
-          (smart-mode-remove-recipe-overlays (1+ (point)))
+          (setq me (match-end 0))
+          (goto-char bol) ;; go back to the beginning of line
+          (when (looking-at "^[ \t]*")
+            (let ((a (match-end 0)) (b mb))
+              (put-text-property a b 'font-lock-face 'smart-mode-targets-face)
+              (put-text-property a b 'smart-semantic 'dependency)))
+          (goto-char me) ;; go to the end of ":"
           (cond ((looking-at "[ \t]*$")
                  (push ?\t syntaxs) ;; recipe
                  (goto-char (1+ (match-end 0))))
@@ -784,7 +814,9 @@
                  (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
                  (push ?\[ syntaxs) ;; modifiers
                  (push ?\[ ctxs)
-                 (goto-char (match-end 0)))))
+                 (goto-char (match-end 0)))
+                ((looking-at "[ \t]*\\(\n\\)")
+                 (smart-mode-remove-recipe-overlays (match-beginning 1)))))
          
          (t (forward-char)))
 
@@ -941,26 +973,6 @@ matched in a rule action."
       (goto-char pt)
       nil)))
 
-(defun smart-mode-previous-dependency--deprecated ()
-  "Move point to the beginning of the previous dependency line.
-Returns `t' if there's a previous dependency line, or nil."
-  (interactive)
-  (let ((pos (point)) (continue t))
-    (if (smart-mode-previous-dependency-inner)
-        (prog1 t (while (and continue (looking-at-p "^\t"))
-                   (unless (smart-mode-previous-dependency-inner)
-                     (goto-char pos) (setq continue nil)))))))
-
-(defun smart-mode-next-dependency--deprecated ()
-  "Move point to the beginning of the next dependency line.
-Returns `t' if there's a next dependency line, or nil."
-  (interactive)
-  (let ((pos (point)) (continue t))
-    (if (smart-mode-next-dependency-inner)
-        (prog1 t (while (and continue (looking-at-p "^\t"))
-                   (unless (smart-mode-next-dependency-inner)
-                     (goto-char pos) (setq continue nil)))))))
-
 (defun smart-mode-previous-dependency ()
   "Move point to the beginning of the previous dependency line.
 Returns `t' if there's a previous dependency line, or nil."
@@ -1004,21 +1016,6 @@ Returns `t' if there's a next dependency line, or nil."
   ;;   (indent-line-to 0))
   ;;  (t (insert-string "\t")))
   (message "todo: tab-it"))
-
-(defun smart-mode-newline--deprecated ()
-  (interactive)
-  (cond
-   ;;((looking-at-p "^[^\t]") (insert-string "\n"))
-   ((and (smart-recipe-dependency-line-p)
-         (smart-can-add-recipe-p))
-    (if (looking-at-p "^\t")
-        (progn (forward-line -1) (smart-mode-end-of-line)))
-    (smart-insert-mark-recipe "\n\t"))
-   ((save-excursion
-      (beginning-of-line)
-      (smart-mode-match-dependency (smart-mode-line-end-position)))
-    (smart-insert-mark-recipe "\n\t"))
-   (t (insert-string "\n"))))
 
 (defun smart-mode-newline ()
   (interactive)
@@ -1233,21 +1230,21 @@ Returns `t' if there's a next dependency line, or nil."
     (if (< beg end) (smart-mode-scan-region beg end))))
 
 (defun smart-mode-invalidate-default-range (beg end)
-  (smart-mode-debug-message "invalidate-default: (%s)" 
-                            (buffer-substring beg end))
+  (smart-mode-debug-message "invalidate-default: (%s)" (buffer-substring beg end))
   (save-excursion
     (goto-char beg) ;; the beginning of range
     (smart-mode-beginning-of-line)
     (let ((dialect (get-text-property (point) 'smart-semantic)))
-      (cond 
+      ;;(smart-mode-debug-message "invalidate-default: semantic(%s)" dialect)
+      (cond
+       ;;((looking-at "^") (backward-char))
        ((and (equal dialect 'recipe) (looking-at "^\t"))
         (forward-char))
        ((looking-at "[ \t]*\\()\\)")
         (smart-mode-goto-open-paren (point-min) (match-beginning 1))))
       (setq beg (point))
-      
+
       (goto-char end) ;; the end of range
-      (message "invalidate-default: semantic(%s)" dialect)
       (cond 
        ((looking-at "^") (backward-char))
        ((looking-at "\\()\\)[ \t]*$") nil)
@@ -1316,18 +1313,6 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-comment-uncomment-region (beg end &optional arg)
   (smart-mode-debug-message "commeng-uncomment-region: beg(%S) end(%S) arg(%S)" beg end arg))
-
-(defun smart-mode-goto-open-paren--deprecated (pos)
-  (catch 'break
-    (let ((ub (point-min)) (bound (1- pos)) (lp) (rp))
-      (while (setq lp (search-backward "(" ub t))
-        (save-excursion
-          (setq rp (search-forward ")" bound t))
-          (message "(%s %s" rp bound)
-          (if rp (setq bound (1- lp))
-            (throw 'break t)))
-        (if (< ub lp) (throw 'break nil)
-          (goto (1- lp)))))))
 
 (defun smart-mode-goto-open-paren (bound end)
   "Goto the openning \"(\""
