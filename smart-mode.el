@@ -576,7 +576,7 @@
           (put-text-property mb me 'font-lock-face 'font-lock-comment-face)
           (put-text-property mb me 'smart-semantic 'comment))
 
-         ((and syntaxs (eq ?^ (car syntaxs))
+         ((and syntaxs (eq ?^ (car syntaxs)) (looking-back "^[ \t]*")
                (looking-at smart-mode-statements))
           (setq mb (match-beginning 0) me (match-end 0)
                 ms (match-string 0) drop mb)
