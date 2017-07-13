@@ -105,7 +105,7 @@
   "Supported dialects regexps by smart.")
 
 (defconst smart-mode-statement-keywords
-  `("project" "import" "use" "files" "extensions"
+  `("project" "module" "import" "use" "files" "extensions"
     "include"  "eval" "export")
   "List of keywords understood by smart as statements.")
 
@@ -836,7 +836,7 @@
             (put-text-property mb me 'smart-semantic 'error))
           (pop syntaxs) (pop closers)))
 
-      (message "%s %s" syntaxs '(?^ ?: ?\t))
+      (message "default-scan: %s %s" syntaxs '(?^ ?: ?\t))
       (when (or (and (eq ?\t (car syntaxs)) (eq ?^ (cadr syntaxs)))
                 (and (eq ?: (car syntaxs)) (eq ?^ (cadr syntaxs))))
         (message "todo: rescan (%s) recipes (%s)" dialect
