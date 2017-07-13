@@ -678,7 +678,7 @@
           (let ((bol mb) (eol me))
             (smart-mode-put-recipe-overlays bol (1+ eol))
             (setq mb (match-beginning 1) me (match-end 1))
-            (put-text-property mb eol 'smart-semantic 'recipe)
+            (put-text-property mb eol 'smart-semantic 'recipe) ;; FIXME: include \n
             (put-text-property mb eol 'smart-dialect dialect)
             (let ((func (intern-soft (format "smart-mode-dialect-%s-scan" 
                                              (or dialect 'internal)))))
@@ -866,7 +866,7 @@
           (let ((bol (point)))
             ;;(message "recipe:%S" (buffer-substring bol eol))
             (smart-mode-put-recipe-overlays bol (+ eol 1))
-            (put-text-property (+ bol 1) eol 'smart-semantic 'recipe)
+            (put-text-property (+ bol 1) eol 'smart-semantic 'recipe) ;; FIXME: include \n
             (put-text-property (+ bol 1) eol 'smart-dialect dialect)
             ;; TODO: scan dialect recipes
             ))))))
@@ -1033,11 +1033,12 @@ Returns `t' if there's a next dependency line, or nil."
         (semantic) (dialect) (func))
     (when is-eol (setq pos (1- pos)))
     (setq semantic (get-text-property pos 'smart-semantic)
-          dialect (get-text-property pos 'smart-dialect))
+          dialect (or (get-text-property pos 'smart-dialect) 'internal))
     (cond
      ((equal semantic 'recipe)
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
-      (if (and func (functionp func)) (funcall func is-eol)))
+      (if (and func (functionp func)) (funcall func is-eol)
+        (message "undefined smart-mode-%s-recipe-newline" dialect)))
 
      ((save-excursion
         (end-of-line)
@@ -1075,11 +1076,13 @@ Returns `t' if there's a next dependency line, or nil."
   (interactive)
   (unless dialect 
     (setq dialect (get-text-property (point) 'smart-semantic)))
+  (message "recipe-newline: %s" dialect)
   (let (beg end)
-    (newline) (setq beg (point)) (insert "\t") (setq end (1+ (point)))
-    ;;(put-text-property beg end 'smart-semantic 'recipe)
-    ;;(put-text-property beg end 'smart-dialect dialect)
-    ))
+    (newline) (setq beg (point)) (insert "\t") (setq end (point))
+    (put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
+    (put-text-property beg end 'smart-dialect dialect)
+    ;; FIXME: let scanner handle with overlays
+    (smart-mode-put-recipe-overlays beg (1+ end))))
 
 (defun smart-mode-internal-recipe-newline (&optional is-eol)
   (smart-mode-recipe-newline 'internal))
@@ -1098,16 +1101,19 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-delete-backward-char () ;; see `delete-backward-char'
   (interactive)
+  (message "delete-backward-char: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond
        ((equal (get-text-property (point) 'smart-semantic) 'recipe)
         (cond
-         ((looking-back "^\t") t)
+         ((looking-back "^\t") t) ;; FIXME: in this case, the semantic is nil
          ((looking-at "^\t") (backward-char)
-          (message "delete-backward-char: semantic(%S)" (get-text-property (point) 'smart-semantic))
           ;;(when (equal (get-text-property (point) 'smart-semantic) 'dependency)
           ;;  )
-          t))))
+          t)))
+       ((and (looking-back "^\t")
+             (equal (get-text-property (1- (point)) 'smart-semantic) 'recipe))
+        (delete-backward-char 2) t))
     (delete-backward-char 1)))
 
 (defun smart-mode-delete-forward-char () ;; see `delete-forward-char'
@@ -1164,7 +1170,19 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-kill-line ()
   (interactive)
-  (kill-line))
+  (message "kill-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
+  (unless
+      (cond
+       ;; inside a recipe
+       ((equal (get-text-property (point) 'smart-semantic) 'recipe)
+        (cond ((looking-at "$") (delete-char 2) t)))
+       ((and (looking-at "$")
+             (equal (get-text-property (1- (point)) 'smart-semantic) 'recipe))
+        (delete-char 2) t)
+
+       ;; ...
+       )
+    (kill-line)))
 
 (defun smart-insert-mark-recipe (s)
   (if s (insert-string s))
@@ -1348,6 +1366,7 @@ Returns `t' if there's a next dependency line, or nil."
             (throw 'break t)))))))
 
 (defun smart-mode-indent-line ()
+  ;;(message "indent-line")
   (unless
       (cond 
        ;; indenting a recipe
