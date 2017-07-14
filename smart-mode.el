@@ -70,7 +70,7 @@
   "Supported dialects by smart.")
 
 (defconst smart-mode-dialect-interpreters
-  `("shell" "sh" "docksh" "python" "perl" "lua")
+  `("shell" "sh" "python" "perl" "lua")
   "Supported dialects by smart.")
 
 (defconst smart-mode-project-name-regex
@@ -81,7 +81,7 @@
 (defconst smart-mode-modifier-names
   `("compare" "stdout" "stderr" "stdin"
     "update-file" "check-file" 
-    ;;"plain" "docksh"
+    ;;"plain" "dock"
     )
   "List of names understood by smart as modifiers.")
 
@@ -94,7 +94,7 @@
   "")
 
 (defconst smart-mode-dialect-modifiers-regex
-  (concat "\\s-*\\(plain\\|dock\\|docksh\\)\\s-+"
+  (concat "\\s-*\\(plain\\|dock\\)\\s-+"
           "\\([^ \t)]+\\)" ;;(regexp-opt smart-mode-dialects 'words)
           )
   "")
