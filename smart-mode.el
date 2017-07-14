@@ -1364,19 +1364,41 @@ Returns `t' if there's a next dependency line, or nil."
             (throw 'break t)))))))
 
 (defun smart-mode-indent-line ()
-  ;;(message "indent-line: semantic(%s)" 
-  ;;         (get-text-property (point) 'smart-semantic))
+  ;;(message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond 
-       ;; indenting a recipe
-       ((equal (get-text-property (point) 'smart-semantic) 'recipe)
-        (back-to-indentation)
+       ;; indenting lines in parens, e.g. 'files (...)'
+       ((string= (get-text-property (point) 'smart-semantic) 'files)
+        (message "indent-line: files semantic(%s)" (get-text-property (point) 'smart-semantic))
+        (let (indent)
+          (save-excursion
+            (when (smart-mode-goto-open-paren (point-min) (match-beginning 1))
+              (setq indent (if (save-excursion (beginning-of-line)
+                                               (looking-at smart-mode-statements))
+                               0 smart-mode-default-indent))))
+          (if (null indent) (back-to-indentation)
+            (indent-line-to indent)))
+        t)
+
+       ;; FIXME: indenting lines after opening statements, e.g. 'files ('
+       ((and (looking-back "\\((\\)[ \t]*\n[ \t]*")
+             (save-excursion (beginning-of-line -1)
+                             (looking-at smart-mode-statements)))
+        (let ((indent smart-mode-default-indent))
+          (if (null indent) (back-to-indentation)
+            (indent-line-to indent)))
         t)
        
+       ;; indenting a recipe
+       ((string= (get-text-property (point) 'smart-semantic) 'recipe)
+        (back-to-indentation)
+        t)
+
        ;; indenting a line starting with ")"
        ((or (looking-at "[ \t]*\\()\\)")
             (looking-back "^[ \t]*\\()\\)[ \t]*"))
         (let ((bound (point-min)) (indent) (lp) (rp (match-end 1)))
+          ;;(message "indent-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
           (save-excursion
             (when (smart-mode-goto-open-paren bound (match-beginning 1))
               (if (save-excursion (beginning-of-line)
