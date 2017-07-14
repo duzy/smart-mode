@@ -632,7 +632,7 @@
               (goto-char (match-end 0)))))))
 
          ((and syntaxs (eq ?^ (car syntaxs))
-               (looking-at "\\(!=\\|[*:+]?[:?]?=\\)"))
+               (looking-at "\\(!=\\|[*:+]?[:?]?=\\)[^>]"))
           (setq mb (match-beginning 1) me (match-end 1))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (setq me (match-end 0))
@@ -762,6 +762,13 @@
           (setq indent (- indent smart-mode-default-indent)
                 indent-beg (if parens mb))
           (forward-char))
+
+         ;; pair: key => value
+         ((looking-at "\\(?:=>\\)")
+          (setq mb (match-beginning 0) me (match-end 0))
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (put-text-property mb me 'syntax-table (string-to-syntax "."))
+          (forward-char 2))
          
          ((looking-at "'") ;; FIXME: quote pairing is buggy
           (setq mb (match-beginning 0) me (match-end 0))
