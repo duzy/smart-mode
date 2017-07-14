@@ -70,7 +70,7 @@
   "Supported dialects by smart.")
 
 (defconst smart-mode-dialect-interpreters
-  `("shell" "python" "perl" "lua")
+  `("shell" "docksh" "python" "perl" "lua")
   "Supported dialects by smart.")
 
 (defconst smart-mode-project-name-regex
@@ -94,7 +94,7 @@
   "")
 
 (defconst smart-mode-dialect-modifiers-regex
-  (concat "\\s-*\\(plain\\|docksh\\)\\s-+"
+  (concat "\\s-*\\(plain\\|dock\\|docksh\\)\\s-+"
           "\\([^ \t)]+\\)" ;;(regexp-opt smart-mode-dialects 'words)
           )
   "")
@@ -1380,14 +1380,14 @@ Returns `t' if there's a next dependency line, or nil."
             (indent-line-to indent)))
         t)
 
-       ;; FIXME: indenting lines after opening statements, e.g. 'files ('
-       ((and (looking-back "\\((\\)[ \t]*\n[ \t]*")
-             (save-excursion (beginning-of-line -1)
-                             (looking-at smart-mode-statements)))
-        (let ((indent smart-mode-default-indent))
-          (if (null indent) (back-to-indentation)
-            (indent-line-to indent)))
-        t)
+       ;; ;; FIXME: indenting lines after opening statements, e.g. 'files ('
+       ;; ((and (looking-back "\\((\\)[ \t]*\n[ \t]*")
+       ;;       (save-excursion (beginning-of-line -1)
+       ;;                       (looking-at smart-mode-statements)))
+       ;;  (let ((indent smart-mode-default-indent))
+       ;;    (if (null indent) (back-to-indentation)
+       ;;      (indent-line-to indent)))
+       ;;  t)
        
        ;; indenting a recipe
        ((string= (get-text-property (point) 'smart-semantic) 'recipe)
