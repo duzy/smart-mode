@@ -66,11 +66,11 @@
   "Regex used to find macro assignment lines in a makefile.")
 
 (defconst smart-mode-dialects
-  `("c" "c++" "shell" "python" "perl" "lua")
+  `("c" "c++" "shell" "sh" "python" "perl" "lua")
   "Supported dialects by smart.")
 
 (defconst smart-mode-dialect-interpreters
-  `("shell" "docksh" "python" "perl" "lua")
+  `("shell" "sh" "docksh" "python" "perl" "lua")
   "Supported dialects by smart.")
 
 (defconst smart-mode-project-name-regex
