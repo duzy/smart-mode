@@ -192,17 +192,20 @@
 
 (defconst smart-mode-recipe-call-regexs
   `(("\\$\\$" 0 font-lock-constant-face)
-    ("\\(\\$\\)\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
+    ("[^$]\\(\\$\\)\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
      (1 font-lock-constant-face)
      (2 font-lock-builtin-face))
-    ("\\(\\$\\)\\([@%*]\\)"
+    ("[^$]\\(\\$\\)\\([@%*]\\)"
      (1 font-lock-constant-face)
      (2 'smart-mode-targets-face))
-    ("\\(\\$[({]\\)\\s-*\\([^$) ]+\\)[ \t]+.*?\\([)}]\\)"
+    ("[^$]\\(\\$\\)\\(\\(?:[[:alnum:]]+\\|_\\|-\\)\\)"
+     (1 font-lock-constant-face)
+     (2 font-lock-variable-name-face))
+    ("[^$]\\(\\$[({]\\)\\s-*\\([^$) ]+\\)[ \t]+.*?\\([)}]\\)"
      (1 font-lock-constant-face)
      (2 font-lock-function-name-face)
      (3 font-lock-constant-face))
-    ("\\(\\$[({]\\)\\s-*\\([^$) ]+\\)\\([)}]\\)"
+    ("[^$]\\(\\$[({]\\)\\s-*\\([^$) ]+\\)\\([)}]\\)"
      (1 font-lock-constant-face)
      (2 font-lock-variable-name-face)
      (3 font-lock-constant-face))))
@@ -272,10 +275,21 @@
 (defconst smart-mode-recipe-shell-font-lock-keywords
   `(("#.*?$" 0 font-lock-comment-face)
 
-    ;; command switches/options
-    ("-\\(?:\\w\\|-\\)*"
+    ;; the @ prefix
+    ("^\t\\(@\\)" 1 font-lock-constant-face)
+
+    ;; single quoted strings
+    ("'[^']*'"
      (0 font-lock-string-face prepend))
 
+    ;; double quoted strings
+    ("\"[^\"]*\""
+     (0 font-lock-string-face prepend))
+
+    ;; command switches/options
+    ("[ \t]\\(-\\{1,2\\}\\(?:\\w\\|-\\)*=\\w*\\)"
+     (1 font-lock-string-face prepend))
+    
     ;; builtins
     (,(regexp-opt '("cd" "export" "test")
                   'words)
@@ -1010,7 +1024,7 @@ Returns `t' if there's a next dependency line, or nil."
     (setq semantic (get-text-property pos 'smart-semantic)
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
     (cond
-     ((equal semantic 'recipe)
+     ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)
         (message "undefined smart-mode-%s-recipe-newline" dialect)))
@@ -1049,7 +1063,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-recipe-newline (&optional dialect)
   (interactive)
-  (unless dialect 
+  (unless dialect
     (setq dialect (get-text-property (point) 'smart-semantic)))
   (message "recipe-newline: %s" dialect)
   (let (beg end)
