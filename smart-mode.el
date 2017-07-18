@@ -455,7 +455,7 @@
 
 (defun smart-mode-scan-region (beg end)
   "Identify syntactic tokens/symbols (strings/comments/keywords, etc.)."
-  ;;(smart-mode-debug-message "scan-region: beg(%d) end(%d)" beg end)
+  (smart-mode-debug-message "scan-region: beg(%d) end(%d)" beg end)
   (smart-mode-with-silent-modifications
    (save-excursion
      (save-restriction
@@ -533,7 +533,7 @@
   )
 
 (defun smart-mode-default-scan (beg end &optional callonly)
-  ;;(message "default-scan: (%s)" (buffer-substring beg end))
+  (message "default-scan: (%s)" (buffer-substring beg end))
   (save-excursion
     (let (mb me ms dialect syntaxs closers parens ctxs drop 
              indent indent-beg bol)
@@ -1222,7 +1222,7 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-scan-region (point-min) (point-max)))
 
 (defun smart-mode-extend-region ()
-  ;;(smart-mode-debug-message "extend-region: fl-beg(%S) fl-end(%S)" font-lock-beg font-lock-end)
+  (smart-mode-debug-message "extend-region: fl-beg(%S) fl-end(%S)" font-lock-beg font-lock-end)
   (unless smart-mode-inhibit-fontification
     (when (or (null smart-mode-change-beg) (< font-lock-beg smart-mode-change-beg))
       (setq smart-mode-change-beg font-lock-beg))
@@ -1241,13 +1241,12 @@ Returns `t' if there's a next dependency line, or nil."
   (unless beg (setq beg smart-mode-change-beg))
   (unless end (setq end smart-mode-change-end))
   (setq smart-mode-change-beg nil smart-mode-change-end nil)
-  ;;(smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
+  (smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
   (if (and end (> end (point-max))) (setq end (point-max)))
   (cond ((or (null beg) (null end)) nil)
-        (t (smart-mode-invalidate-region beg end))))
+        ((< beg end) (smart-mode-invalidate-region beg end))))
 
 (defun smart-mode-invalidate-region (beg end)
-  ;; TODO: decide invalidate range (beg, end) according to the dialect
   (let ((semantic (get-text-property beg 'smart-semantic))
         (dialect (get-text-property beg 'smart-dialect))
         (funame) (func) (range))
@@ -1260,7 +1259,7 @@ Returns `t' if there's a next dependency line, or nil."
               (setq range (funcall func beg end))))
       (setq range (smart-mode-invalidate-default-range beg end)))
     (if range (setq beg (car range) end (cdr range)))
-    ;;(smart-mode-debug-message "invalidate-region: beg(%S) end(%S)" beg end)
+    (smart-mode-debug-message "invalidate-region: beg(%S) end(%S)" beg end)
     (if (< beg end) (smart-mode-scan-region beg end))))
 
 (defun smart-mode-invalidate-default-range (beg end)
