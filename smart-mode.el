@@ -65,12 +65,14 @@
   "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(!=\\|[*:+]?[:?]?=\\)"
   "Regex used to find macro assignment lines in a makefile.")
 
-(defconst smart-mode-dialects
-  `("c" "c++" "shell" "sh" "python" "perl" "lua")
-  "Supported dialects by smart.")
-
 (defconst smart-mode-dialect-interpreters
   `("shell" "sh" "python" "perl" "lua")
+  "Supported dialects by smart.")
+
+(defconst smart-mode-dialects
+  `(,@smart-mode-dialect-interpreters
+    "c" "c++" "go" "json" "yaml" "xml"
+    "makefile" "dockerfile" "iptables")
   "Supported dialects by smart.")
 
 (defconst smart-mode-project-name-regex
@@ -296,8 +298,8 @@
      (1 font-lock-builtin-face prepend))
 
     ;; keywords
-    (,(regexp-opt '("exec" "function" "do" "while" "for"
-                    "case" "esac" "if" "then" "fi")
+    (,(regexp-opt '("exec" "function" "do" "while" "done" "for"
+                    "case" "esac" "if" "then" "else" "fi")
                   'words)
      (1 font-lock-keyword-face prepend))
     
@@ -1030,6 +1032,7 @@ Returns `t' if there's a next dependency line, or nil."
     (when is-eol (setq pos (1- pos)))
     (setq semantic (get-text-property pos 'smart-semantic)
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
+    (message "newline: semantic(%s) dialect(%s)" semantic dialect)
     (cond
      ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
@@ -1042,6 +1045,7 @@ Returns `t' if there's a next dependency line, or nil."
       (insert-string (if (looking-back "[ \t]") "\\" " \\"))
       (newline-and-indent) (save-excursion (insert-string " ")))
      
+     ;; newline at the end of current line
      (is-eol
       (cond
        ((eq ?\\ (char-before))
@@ -1061,6 +1065,12 @@ Returns `t' if there's a next dependency line, or nil."
        
        ((looking-back (concat smart-mode-statements "?[ \t]*([ \t]*$"))
         (newline-and-indent))
+
+       ;; both previous and next line are "^\t"
+       ((and (looking-at-bol "^\t" -1)
+             ;;(looking-at-bol "^\t" 1)
+             )
+        (insert "\n\t"))
        
        ;; open a new line in general
        (t ;;(insert-string "\n") ;;(open-line 1) ;;(split-line)
@@ -1086,6 +1096,8 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-recipe-newline 'c))
 (defun smart-mode-c++-recipe-newline (&optional is-eol)
   (smart-mode-recipe-newline 'c++))
+(defun smart-mode-sh-recipe-newline (&optional is-eol)
+  (smart-mode-shell-recipe-newline is-eol))
 (defun smart-mode-shell-recipe-newline (&optional is-eol)
   (smart-mode-recipe-newline 'shell))
 (defun smart-mode-python-recipe-newline (&optional is-eol)
@@ -1094,6 +1106,14 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-recipe-newline 'perl))
 (defun smart-mode-lua-recipe-newline (&optional is-eol)
   (smart-mode-recipe-newline 'lua))
+(defun smart-mode-json-recipe-newline (&optional is-eol)
+  (smart-mode-recipe-newline 'json))
+(defun smart-mode-yaml-recipe-newline (&optional is-eol)
+  (smart-mode-recipe-newline 'yaml))
+(defun smart-mode-dockerfile-recipe-newline (&optional is-eol)
+  (smart-mode-recipe-newline 'dockerfile))
+(defun smart-mode-iptables-recipe-newline (&optional is-eol)
+  (smart-mode-recipe-newline 'iptables))
 
 (defun smart-mode-delete-backward-char () ;; see `delete-backward-char'
   (interactive)
@@ -1241,7 +1261,7 @@ Returns `t' if there's a next dependency line, or nil."
   (unless beg (setq beg smart-mode-change-beg))
   (unless end (setq end smart-mode-change-end))
   (setq smart-mode-change-beg nil smart-mode-change-end nil)
-  (smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
+  ;;(smart-mode-debug-message "propertize: beg(%S) end(%S)" beg end)
   (if (and end (> end (point-max))) (setq end (point-max)))
   (cond ((or (null beg) (null end)) nil)
         ((< beg end) (smart-mode-invalidate-region beg end))))
@@ -1259,7 +1279,7 @@ Returns `t' if there's a next dependency line, or nil."
               (setq range (funcall func beg end))))
       (setq range (smart-mode-invalidate-default-range beg end)))
     (if range (setq beg (car range) end (cdr range)))
-    (smart-mode-debug-message "invalidate-region: beg(%S) end(%S)" beg end)
+    ;;(smart-mode-debug-message "invalidate-region: beg(%S) end(%S)" beg end)
     (if (< beg end) (smart-mode-scan-region beg end))))
 
 (defun smart-mode-invalidate-default-range (beg end)
@@ -1370,7 +1390,7 @@ Returns `t' if there's a next dependency line, or nil."
             (throw 'break t)))))))
 
 (defun smart-mode-indent-line ()
-  ;;(message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond 
        ;; indenting lines in parens, e.g. 'files (...)'
@@ -1422,6 +1442,10 @@ Returns `t' if there's a next dependency line, or nil."
           (beginning-of-line)
           (looking-back "\\\\\n")) ;; previous line ends with "\\"
         (indent-line-to smart-mode-default-indent)
+        t)
+
+       ;; indenting lines beginning with "^\t" 
+       ((looking-at-bol "^\t")
         t))
      
      ;; TODO: other indentation cases
