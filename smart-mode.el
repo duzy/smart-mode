@@ -52,7 +52,7 @@
   "Characters to skip to find a line that might be a dependency.")
 
 (defconst smart-mode-calling-regex
-  "[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
+  "[^$][\\$\\&][({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
   "Regex used to find $(macro) uses in a makefile.")
 
 ;; Note that the first and second subexpression is used by font lock.
@@ -71,7 +71,7 @@
 
 (defconst smart-mode-dialects
   `(,@smart-mode-dialect-interpreters
-    "c" "c++" "go" "json" "yaml" "xml"
+    "c" "c++" "go" "json" "yaml" "xml" "text"
     "makefile" "dockerfile" "iptables")
   "Supported dialects by smart.")
 
@@ -143,9 +143,9 @@
 
       ;; Automatic variable references and single character variable
       ;; references, but not shell variables references.
-      ("[^$]\\$\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
+      ("[^$][\\$\\&]\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
        1 font-lock-constant-face prepend)
-      ("[^$]\\(\\$[@%*]\\)"
+      ("[^$]\\([\\$\\&][@%*]\\)"
        1 'smart-mode-targets-face append)
 
       ;; Fontify conditionals and includes.
@@ -177,11 +177,11 @@
               ("^\\( +\\)\t" 1 'smart-mode-useless-space-face)))
 
       ;; $(function ...) ${function ...} (see `makefile-gmake-font-lock-keywords')
-      ("[^$]\\$[({]\\([-a-zA-Z0-9_.]+\\s \\)"
+      ("[^$][\\$\\&][({]\\([-a-zA-Z0-9_.]+\\s \\)"
        1 font-lock-function-name-face prepend)
 
       ;; $(shell ...) ${shell ...} (see `makefile-gmake-font-lock-keywords')
-      ("[^$]\\$\\([({]\\)shell[ \t]+"
+      ("[^$][\\$\\&]\\([({]\\)shell[ \t]+"
        smart-mode-match-shell-function-end nil nil
        (1 'smart-mode-dependency-shell-face prepend t))
       
@@ -744,6 +744,17 @@
                    (setq mb (match-beginning 1) me (match-end 1))
                    (put-text-property mb me 'font-lock-face 'font-lock-builtin-face)
                    (goto-char (match-end 0)))
+                  ;; highlight arguments: ((arg1 arg2 arg3))
+                  ((looking-at "\\((\\)\\([^)]*\\)\\()\\))") ;; ((a b c))
+                   (setq mb (match-beginning 1) me (match-end 1)) ;; the (
+                   (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+                   (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+                   (setq mb (match-beginning 2) me (match-end 2)) ;; the args
+                   (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
+                   (setq mb (match-beginning 3) me (match-end 3)) ;; the )
+                   (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+                   (put-text-property mb me 'syntax-table (string-to-syntax ")("))
+                   (goto-char (match-end 3)))
                   ;; highlight unknown modifiers
                   ((looking-at "\\(\\(?:\\w\\|-\\|+\\)+\\)")
                    (setq mb (match-beginning 1) me (match-end 1))
@@ -801,7 +812,7 @@
           (put-text-property me (1+ me) 'syntax-table (string-to-syntax "|"))
           (put-text-property mb me 'font-lock-face 'font-lock-string-face))
 
-         ((looking-at "\\$\\([({]?\\)")
+         ((looking-at "[$&]\\([({]?\\)")
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (let* ((pos (match-end 0)) (lpar (match-string 1)))
