@@ -82,7 +82,7 @@
 
 (defconst smart-mode-modifier-names
   `("compare" "stdout" "stderr" "stdin"
-    "update-file" "check-file" 
+    "update-file" "check-file" "cd"
     ;;"plain" "dock"
     )
   "List of names understood by smart as modifiers.")
