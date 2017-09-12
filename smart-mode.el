@@ -82,7 +82,8 @@
 
 (defconst smart-mode-modifier-names
   `("compare" "stdout" "stderr" "stdin"
-    "update-file" "check-file" "cd"
+    "update-file" "check-file" "cd" "env"
+    "grep-compare" "grep-dependents"
     ;;"plain" "dock"
     )
   "List of names understood by smart as modifiers.")
@@ -119,7 +120,12 @@
   "Regex to match keywords understood by smart as statements.")
 
 (defconst smart-mode-builtin-names
-  `("print" "println" "dir" "dirdir" "basename" "base64")
+  `("print" "printl" "println" "plus" "minus" "string" "patsubst"
+    "filter" "filter-out" "encode-base64" "decode-base64"
+    "base" "dir" "dirdir" "ndir"
+    "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
+    "truncate" "link" "symlink"
+    "read-dir" "read-file" "write-file")
   "List of names understood by smart as builtins.")
 
 (defconst smart-mode-builtins
