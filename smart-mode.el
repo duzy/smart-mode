@@ -1056,9 +1056,14 @@ Returns `t' if there's a next dependency line, or nil."
       (if (and func (functionp func)) (funcall func is-eol)
         (message "undefined smart-mode-%s-recipe-newline" dialect)))
 
-     ((save-excursion
-        (end-of-line)
-        (looking-back "\\\\$"))
+     ;; Cursor is at the end of "\\" line.
+     ((looking-back "\\\\$")
+      (newline-and-indent)
+      ;; Insert \\ if next line is ending with \\
+      (unless (looking-at-eol "\\\\$" 1)
+        (save-excursion (insert-string " \\"))))
+     ;; Cursor is in a "\\" line.
+     ((looking-at-eol "\\\\$")
       (insert-string (if (looking-back "[ \t]") "\\" " \\"))
       (newline-and-indent) (save-excursion (insert-string " ")))
      
@@ -1147,8 +1152,13 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun looking-at-bol (s &optional n)
   (save-excursion
-    (beginning-of-line n)
+    (forward-line n) ;; beginning-of-line
     (looking-at s)))
+
+(defun looking-at-eol (s &optional n)
+  (save-excursion
+    (end-of-line n)
+    (looking-back s)))
 
 (defun smart-mode-delete-forward-char () ;; see `delete-forward-char'
   (interactive)
