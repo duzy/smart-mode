@@ -379,7 +379,7 @@
 (defvar font-lock-beg)
 (defvar font-lock-end)
 
-(defvar smart-mode-debug-message-on t)
+(defvar smart-mode-debug-message-on nil)
 
 (defvar smart-mode-inhibit-fontification nil)
 (defvar smart-mode-change-beg nil)
@@ -541,7 +541,7 @@
   )
 
 (defun smart-mode-default-scan (beg end &optional callonly)
-  (message "default-scan: (%s)" (buffer-substring beg end))
+  ;;(message "default-scan: (%s)" (buffer-substring beg end))
   (save-excursion
     (let (mb me ms dialect syntaxs closers parens ctxs drop 
              indent indent-beg bol)
@@ -570,7 +570,7 @@
             (push ?^ syntaxs)))
 
         (when (looking-at "$")
-          (message "eol: %s %s" syntaxs '(?^ ?: ?\t))
+          ;;(message "eol: %s %s" syntaxs '(?^ ?: ?\t))
           (let ((s (car syntaxs)))
             (cond
              ((eq s ?^)
@@ -725,7 +725,7 @@
          ((looking-at "(")
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-          (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+          ;;(put-text-property mb me 'syntax-table (string-to-syntax "()"))
           (when (and parens indent-beg)
             (smart-mode-put-text-indent indent-beg mb indent))
           (setq indent (+ indent smart-mode-default-indent)
@@ -754,12 +754,12 @@
                   ((looking-at "\\((\\)\\([^)]*\\)\\()\\))") ;; ((a b c))
                    (setq mb (match-beginning 1) me (match-end 1)) ;; the (
                    (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-                   (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+                   ;;(put-text-property mb me 'syntax-table (string-to-syntax "()"))
                    (setq mb (match-beginning 2) me (match-end 2)) ;; the args
                    (put-text-property mb me 'font-lock-face 'font-lock-variable-name-face)
                    (setq mb (match-beginning 3) me (match-end 3)) ;; the )
                    (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-                   (put-text-property mb me 'syntax-table (string-to-syntax ")("))
+                   ;;(put-text-property mb me 'syntax-table (string-to-syntax ")("))
                    (goto-char (match-end 3)))
                   ;; highlight unknown modifiers
                   ((looking-at "\\(\\(?:\\w\\|-\\|+\\)+\\)")
@@ -771,7 +771,7 @@
          ((and (not (member (car syntaxs) '(?$ ?,))) (looking-at ")"))
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-          (put-text-property mb me 'syntax-table (string-to-syntax ")("))
+          ;;(put-text-property mb me 'syntax-table (string-to-syntax ")("))
           (if (and indent-beg (< 0 indent))
               (smart-mode-put-text-indent indent-beg mb indent)
             ;;(message "%s %s" indent indent-beg)
@@ -823,10 +823,10 @@
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
           (let* ((pos (match-end 0)) (lpar (match-string 1)))
             (cond ((string= lpar "(")
-                   (put-text-property mb me 'syntax-table (string-to-syntax "()"))
+                   ;;(put-text-property mb me 'syntax-table (string-to-syntax "()"))
                    (push (cons ")" pos) closers))
                   ((string= lpar "{")
-                   (put-text-property mb me 'syntax-table (string-to-syntax "(}"))
+                   ;;(put-text-property mb me 'syntax-table (string-to-syntax "(}"))
                    (push (cons "}" pos) closers))
                   (t
                    (push (cons "\\(:\\s.\\|\\s-\\|[ \t\n]\\)" pos) closers)))
@@ -866,7 +866,7 @@
 
         ;; drop unclosed calls and highlight error.
         (when (and drop (member (car syntaxs) '(?$ ?,)))
-          (message "drop: %S %S %S [%S]" drop syntaxs closers '(?$ ?,))
+          ;;(message "drop: %S %S %S [%S]" drop syntaxs closers '(?$ ?,))
           ;; highlight unbalanced calls
           (setq mb (cdar closers)
                 me (if (integer-or-marker-p drop) drop
@@ -876,11 +876,12 @@
             (put-text-property mb me 'smart-semantic 'error))
           (pop syntaxs) (pop closers)))
 
-      (message "default-scan: %s %s" syntaxs '(?^ ?: ?\t))
+      ;;(message "default-scan: %s %s" syntaxs '(?^ ?: ?\t))
       (when (or (and (eq ?\t (car syntaxs)) (eq ?^ (cadr syntaxs)))
                 (and (eq ?: (car syntaxs)) (eq ?^ (cadr syntaxs))))
-        (message "todo: rescan (%s) recipes (%s)" dialect
-                 (buffer-substring end (line-end-position)))))))
+        ;;(message "todo: rescan (%s) recipes (%s)" dialect
+        ;;         (buffer-substring end (line-end-position)))
+        ))))
 
 (defun smart-mode-put-text-indent (beg end &optional indent)
   (unless indent (setq indent smart-mode-default-indent))
@@ -1049,12 +1050,13 @@ Returns `t' if there's a next dependency line, or nil."
     (when is-eol (setq pos (1- pos)))
     (setq semantic (get-text-property pos 'smart-semantic)
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
-    (message "newline: semantic(%s) dialect(%s)" semantic dialect)
+    ;;(message "newline: semantic(%s) dialect(%s)" semantic dialect)
     (cond
      ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)
-        (message "undefined smart-mode-%s-recipe-newline" dialect)))
+        ;;(message "undefined smart-mode-%s-recipe-newline" dialect)
+        ))
 
      ;; Cursor is at the end of "\\" line.
      ((looking-back "\\\\$")
@@ -1104,7 +1106,7 @@ Returns `t' if there's a next dependency line, or nil."
   (interactive)
   (unless dialect
     (setq dialect (get-text-property (point) 'smart-semantic)))
-  (message "recipe-newline: %s" dialect)
+  ;;(message "recipe-newline: %s" dialect)
   (let (beg end)
     (newline) (setq beg (point)) (insert "\t") (setq end (1+ (point)))
     (put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
@@ -1139,7 +1141,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-delete-backward-char () ;; see `delete-backward-char'
   (interactive)
-  (message "delete-backward-char: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  ;;(message "delete-backward-char: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond ((equal (get-text-property (point) 'smart-semantic) 'recipe)
              (cond ((looking-back "^\t") (delete-backward-char 2) t)
@@ -1162,8 +1164,8 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-delete-forward-char () ;; see `delete-forward-char'
   (interactive)
-  (message "delete-forward-char: semantic(%S)" 
-           (get-text-property (point) 'smart-semantic))
+  ;;(message "delete-forward-char: semantic(%S)" 
+  ;;         (get-text-property (point) 'smart-semantic))
   ;; (message "delete-forward-char: %s"
   ;;          (and (looking-at "$")
   ;;               (save-excursion
@@ -1222,7 +1224,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-kill-line ()
   (interactive)
-  (message "kill-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
+  ;;(message "kill-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond
        ;; inside a recipe
@@ -1417,12 +1419,12 @@ Returns `t' if there's a next dependency line, or nil."
             (throw 'break t)))))))
 
 (defun smart-mode-indent-line ()
-  (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  ;;(message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond 
        ;; indenting lines in parens, e.g. 'files (...)'
        ((string= (get-text-property (point) 'smart-semantic) 'files)
-        (message "indent-line: files semantic(%s)" (get-text-property (point) 'smart-semantic))
+        ;;(message "indent-line: files semantic(%s)" (get-text-property (point) 'smart-semantic))
         (let (indent)
           (save-excursion
             (when (smart-mode-goto-open-paren (point-min) (match-beginning 1))
@@ -1579,9 +1581,10 @@ Returns `t' if there's a next dependency line, or nil."
                             '(font-lock-face face left-margin)))
       (when symbol
         (setq str (concat str (format "%s(%S) " (symbol-name symbol) (get-text-property (point) symbol))))))
-    (message "%s\n" str)
+    ;;(message "%s\n" str)
     ;;(message "syntax-class=%S" (syntax-class (syntax-after (point))))
-    (message nil)))
+    ;;(message nil)
+    ))
 
 (defun smart-mode-debug-message (fmt &rest args)
   (when smart-mode-debug-message-on (apply 'message fmt args)))
