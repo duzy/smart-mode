@@ -82,7 +82,7 @@
 
 (defconst smart-mode-modifier-names
   `("compare" "stdout" "stderr" "stdin"
-    "update-file" "check-file" "cd" "env"
+    "update-file" "check-file" "cd" "env" "var"
     "grep-compare" "grep-dependents"
     ;;"plain" "dock"
     )
