@@ -109,7 +109,7 @@
 
 (defconst smart-mode-statement-keywords
   `("project" "module" "import" "use" "files" "extensions"
-    "include"  "eval" "export")
+    "include"  "eval" "dock" "export")
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-statements--deprecated
