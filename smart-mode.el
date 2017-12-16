@@ -430,8 +430,8 @@
     (define-key map "\C-?"     'smart-mode-delete-backward-char) ;; <backspace>
     (define-key map "\C-d"     'smart-mode-delete-forward-char) ;; <delete>
     (define-key map "\C-k"     'smart-mode-kill-line) ;; kill to line end
-    (define-key map "\C-m"     'smart-mode-newline) ;; C-m
-    ;;(define-key map "\n"       'smart-mode-newline) ;; C-j
+    (define-key map "\C-j"     'smart-mode-newline-j) ;; C-j
+    (define-key map "\C-m"     'smart-mode-newline-m) ;; C-m
     ;;(define-key map "\t"       'smart-mode-tab-it)  ;; C-i or <tab>
     (define-key map "\C-a"     'smart-mode-ctrl-a) ;; C-a
     (define-key map "\C-e"     'smart-mode-ctrl-e) ;; C-e
@@ -1043,14 +1043,19 @@ Returns `t' if there's a next dependency line, or nil."
   ;;  (t (insert-string "\t")))
   (message "todo: tab-it"))
 
-(defun smart-mode-newline ()
+(defun smart-mode-newline-j ()
+  (interactive)
+  (message "newline-j: ...")
+  (insert-string "\n"))
+
+(defun smart-mode-newline-m ()
   (interactive)
   (let ((is-eol (looking-at "$")) (pos (point)) 
         (semantic) (dialect) (func))
     (when is-eol (setq pos (1- pos)))
     (setq semantic (get-text-property pos 'smart-semantic)
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
-    ;;(message "newline: semantic(%s) dialect(%s)" semantic dialect)
+    (message "newline: semantic(%s) dialect(%s)" semantic dialect)
     (cond
      ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
@@ -1271,7 +1276,7 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-scan-region (point-min) (point-max)))
 
 (defun smart-mode-extend-region ()
-  (smart-mode-debug-message "extend-region: fl-beg(%S) fl-end(%S)" font-lock-beg font-lock-end)
+  ;;(smart-mode-debug-message "extend-region: fl-beg(%S) fl-end(%S)" font-lock-beg font-lock-end)
   (unless smart-mode-inhibit-fontification
     (when (or (null smart-mode-change-beg) (< font-lock-beg smart-mode-change-beg))
       (setq smart-mode-change-beg font-lock-beg))
@@ -1419,7 +1424,11 @@ Returns `t' if there's a next dependency line, or nil."
             (throw 'break t)))))))
 
 (defun smart-mode-indent-line ()
-  ;;(message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  (message "trivial-indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  t)
+
+(defun smart-mode-indent-line_ ()
+  (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
   (unless
       (cond 
        ;; indenting lines in parens, e.g. 'files (...)'
