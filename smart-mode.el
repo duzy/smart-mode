@@ -81,7 +81,7 @@
   "Regex matching project name")
 
 (defconst smart-mode-modifier-names
-  `("compare" "stdout" "stderr" "stdin"
+  `("compare" "stdout" "stderr" "stdin" "sudo"
     "update-file" "check-file" "cd" "env" "var"
     "grep-compare" "grep-dependents"
     ;;"plain" "dock"
