@@ -1045,8 +1045,12 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-newline-j ()
   (interactive)
-  (message "newline-j: ...")
-  (insert "\n"));;(insert-string "\n"))
+  (let ((semantic (get-text-property (point) 'smart-semantic))
+        (dialect (get-text-property (point) 'smart-dialect)))
+    (message "newline-j: semantic(%S) dialect(%S)" semantic dialect)
+    (insert "\n"); started a new line without indentation
+    ;;(smart-mode-remove-recipe-overlays (point))
+    ))
 
 (defun smart-mode-newline-m ()
   (interactive)
@@ -1057,7 +1061,7 @@ Returns `t' if there's a next dependency line, or nil."
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
     (message "newline-m: semantic(%s) dialect(%s)" semantic dialect)
     (cond
-     ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
+     ((equal semantic 'recipe);;(and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)
         (message "newline-m: undefined smart-mode-%s-recipe-newline (semantic(%s) dialect(%s))"
@@ -1282,7 +1286,7 @@ Returns `t' if there's a next dependency line, or nil."
   (let ((bor (+ beg 1)) (ovl1) (ovl2)) ; bor: begin of recipe
     ;;(dolist (ovl (overlays-at beg)) (message "put-recipe-overlays: 1.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     ;;(dolist (ovl (overlays-at bor)) (message "put-recipe-overlays: 2.semantic(%S)" (overlay-get ovl 'smart-semantic)))
-    (unless ovl1 
+    (unless ovl1
       (setq ovl1 (make-overlay beg bor))
       (overlay-put ovl1 'smart 'recipe-prefix)
       (overlay-put ovl1 'face smart-mode-recipe-indent-face)
