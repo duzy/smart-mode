@@ -1147,9 +1147,12 @@ Returns `t' if there's a next dependency line, or nil."
 
     ;; Shell mode indentation
     (if continue-line
-        (progn
-          (insert "    ")
-          ))
+        (let ((n (save-excursion
+                   (beginning-of-line 0)
+                   (current-indentation))))
+          (setq n (- n 8)); minus 8 spaces (for tab)
+          (insert (make-string n ?\s)); indent the line
+          (save-excursion (insert " \\"))))
 
     ;; Put recipe overlays
     (put-text-property beg end 'smart-semantic 'recipe)
