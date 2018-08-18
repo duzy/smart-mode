@@ -1109,11 +1109,11 @@ Returns `t' if there's a next dependency line, or nil."
      (t (newline-and-indent)))))
 
 (defun smart-mode-recipe-newline (&optional dialect)
-  (interactive)
+  ;;(interactive)
   (unless dialect
     (setq dialect (get-text-property (point) 'smart-semantic)))
   ;;(message "recipe-newline: %s" dialect)
-  (let (beg end)
+  (let ((beg (point)) end)
     (insert "\n"); start a new line, don't use (newline) to avoid unnecessary indent
     (setq beg (point))
     (insert "\t"); insert tab
@@ -1131,8 +1131,28 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-recipe-newline 'c++))
 (defun smart-mode-sh-recipe-newline (&optional is-eol)
   (smart-mode-shell-recipe-newline is-eol))
+
 (defun smart-mode-shell-recipe-newline (&optional is-eol)
-  (smart-mode-recipe-newline 'shell))
+  (let ((continue-line (looking-back "\\\\$")) (beg (point)) (end nil))
+
+    ;; Start a new recipe line for shell
+    (insert "\n"); start a new line, don't use (newline) to avoid unnecessary indent
+    (setq beg (point)); save begin position for overlay
+    (insert "\t"); insert tab for dialect
+    (setq end (1+ (point))); save end position for overlay
+
+    ;; Shell mode indentation
+    (if continue-line
+        (progn
+          (insert "    ")
+          ))
+
+    ;; Put recipe overlays
+    (put-text-property beg end 'smart-semantic 'recipe)
+    (put-text-property beg end 'smart-dialect 'shell)
+    ;; FIXME: let scanner handle with overlays
+    (smart-mode-put-recipe-overlays beg end)))
+
 (defun smart-mode-python-recipe-newline (&optional is-eol)
   (smart-mode-recipe-newline 'python))
 (defun smart-mode-perl-recipe-newline (&optional is-eol)
@@ -1427,9 +1447,26 @@ Returns `t' if there's a next dependency line, or nil."
           (if (search-backward "(" end t) (setq lp (point))
             (throw 'break t)))))))
 
+(defun smart-mode-shell-dialect-indent-line ()
+  (message "todo: shell-dialect-indent-line"))
 (defun smart-mode-indent-line ()
-  (message "trivial-indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
-  t)
+  (let ((semantic (get-text-property (point) 'smart-semantic))
+        (dialect (get-text-property (point) 'smart-dialect)))
+    
+    (cond
+
+     ;; Indent recipe line
+     ((string= semantic 'recipe)
+      ;; Put recipe tab and overlay
+      (let ((pos (point)))
+        (insert "\t"); insert recipe tab
+        (smart-mode-put-recipe-overlays pos (point)))
+      ;; Find and call dialect indent-line
+      (let ((func (intern-soft (format "smart-mode-%s-dialect-indent-line" dialect))))
+        (if (and func (functionp func)) (funcall func)
+          (message "ERROR: %s-dialect-indent-line unimplemented" dialect))))
+      
+     (t (message "trivial-indent-line: semantic(%S) dialect(%S)" semantic dialect)))))
 
 (defun smart-mode-indent-line_ ()
   (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
