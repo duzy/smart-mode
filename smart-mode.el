@@ -1046,7 +1046,7 @@ Returns `t' if there's a next dependency line, or nil."
 (defun smart-mode-newline-j ()
   (interactive)
   (message "newline-j: ...")
-  (insert-string "\n"))
+  (insert "\n"));;(insert-string "\n"))
 
 (defun smart-mode-newline-m ()
   (interactive)
@@ -1055,30 +1055,31 @@ Returns `t' if there's a next dependency line, or nil."
     (when is-eol (setq pos (1- pos)))
     (setq semantic (get-text-property pos 'smart-semantic)
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
-    (message "newline: semantic(%s) dialect(%s)" semantic dialect)
+    (message "newline-m: semantic(%s) dialect(%s)" semantic dialect)
     (cond
      ((and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)
-        ;;(message "undefined smart-mode-%s-recipe-newline" dialect)
-        ))
+        (message "newline-m: undefined smart-mode-%s-recipe-newline (semantic(%s) dialect(%s))"
+                 dialect semantic dialect)))
 
      ;; Cursor is at the end of "\\" line.
      ((looking-back "\\\\$")
       (newline-and-indent)
       ;; Insert \\ if next line is ending with \\
       (unless (looking-at-eol "\\\\$" 1)
-        (save-excursion (insert-string " \\"))))
+        (save-excursion (insert " \\"))));;(insert-string " \\"))))
      ;; Cursor is in a "\\" line.
      ((looking-at-eol "\\\\$")
-      (insert-string (if (looking-back "[ \t]") "\\" " \\"))
-      (newline-and-indent) (save-excursion (insert-string " ")))
+      ;;(insert-string (if (looking-back "[ \t]") "\\" " \\"))
+      (insert (if (looking-back "[ \t]") "\\" " \\"))
+      (newline-and-indent) (save-excursion (insert " ")));;(insert-string " ")))
      
      ;; newline at the end of current line
      (is-eol
       (cond
        ((eq ?\\ (char-before))
-        (newline-and-indent) (save-excursion (insert-string " \\")))
+        (newline-and-indent) (save-excursion (insert " \\")));;(insert-string " \\")))
        
        ((let* ((pos (smart-mode-line-beginning-position))
                (semantic (get-text-property pos 'smart-semantic)))
@@ -1090,7 +1091,7 @@ Returns `t' if there's a next dependency line, or nil."
         (insert "\n\t"))
        
        ((looking-at "^") ;; empty line, e.g. "^$"
-        (newline nil t)) ;;(insert-string "\n"))
+        (newline nil t));;(insert-string "\n"))
        
        ((looking-back (concat smart-mode-statements "?[ \t]*([ \t]*$"))
         (newline-and-indent))
@@ -1113,7 +1114,10 @@ Returns `t' if there's a next dependency line, or nil."
     (setq dialect (get-text-property (point) 'smart-semantic)))
   ;;(message "recipe-newline: %s" dialect)
   (let (beg end)
-    (newline) (setq beg (point)) (insert "\t") (setq end (1+ (point)))
+    (insert "\n"); start a new line, don't use (newline) to avoid unnecessary indent
+    (setq beg (point))
+    (insert "\t"); insert tab
+    (setq end (1+ (point)))
     (put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
     (put-text-property beg end 'smart-dialect dialect)
     ;; FIXME: let scanner handle with overlays
@@ -1244,7 +1248,7 @@ Returns `t' if there's a next dependency line, or nil."
     (kill-line)))
 
 (defun smart-insert-mark-recipe (s)
-  (if s (insert-string s))
+  (if s (insert s));;(insert-string s))
   (smart-mode-put-recipe-overlays (line-beginning-position)
                              (+ (smart-mode-line-end-position) 1)))
 
