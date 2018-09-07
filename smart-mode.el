@@ -108,7 +108,7 @@
   "Supported dialects regexps by smart.")
 
 (defconst smart-mode-statement-keywords
-  `("project" "module" "import" "use" "files" "extensions"
+  `("project" "module" "configs" "import" "use" "files" "extensions"
     "include"  "eval" "dock" "export")
   "List of keywords understood by smart as statements.")
 
