@@ -347,7 +347,9 @@
   "Face to use for additionally highlighting rule targets in Font-Lock mode."
   :group 'smart)
 
-(defface smart-mode-recipe-face '((t :background "gray95")) ; "gray96"
+(defface smart-mode-recipe-face
+  '((((class color) (background light)) :background "gray95")
+    (((class color) (background dark)) :background "gray16"))
   "Face to use for additionally highlighting rule targets in Font-Lock mode."
   :group 'smart)
 
