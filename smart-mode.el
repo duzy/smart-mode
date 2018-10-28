@@ -333,7 +333,31 @@
   :type 'hook
   :group 'smart)
 
+(defcustom smart-mode-recipe-prefix-format
+  "\t" ;;"%h %20A:"
+  "The format of the prefix added to each recipe line in `smart-mode'
+mode. The format is passed to `format-spec' with the following format keys:
+
+  %h - the abbreviated hash
+  %H - the full hash
+  %a - the author name
+  %A - the author email
+  %c - the committer name
+  %C - the committer email
+  %s - the commit summary
+"
+  :group 'smart)
+
 ;;---- FACES -------------------------------------------------------------
+
+(defface smart-mode-recipe-prefix-face
+  '((((background dark)) (:foreground "gray"
+                          :background "black"))
+    (((background light)) (:foreground "gray"
+                           :background "white"))
+    (t (:weight bold)))
+  "The face used for the hash prefix."
+  :group 'git-blame)
 
 (defface smart-mode-module-name-face
   '((t :inherit font-lock-variable-name-face)) ;; :background  "LightBlue1"
@@ -1289,14 +1313,27 @@ Returns `t' if there's a next dependency line, or nil."
           (delete-overlay ovl)))))
 
 (defun smart-mode-put-recipe-overlays (beg end)
-  (let ((bor (+ beg 1)) (ovl1) (ovl2)) ; bor: begin of recipe
+  (let ((bor (+ beg 1)) (ovl1) (ovl2)
+        ;; (spec `((?h . ,(substring hash 0 6))
+        ;;         (?H . ,hash)
+        ;;         (?a . ,(git-blame-get-info info 'author))
+        ;;         (?A . ,(git-blame-get-info info 'author-mail))
+        ;;         (?c . ,(git-blame-get-info info 'committer))
+        ;;         (?C . ,(git-blame-get-info info 'committer-mail))
+        ;;         (?s . ,(git-blame-get-info info 'summary))))
+        (spec `())) ; bor: begin of recipe
     ;;(dolist (ovl (overlays-at beg)) (message "put-recipe-overlays: 1.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     ;;(dolist (ovl (overlays-at bor)) (message "put-recipe-overlays: 2.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     (unless ovl1
       (setq ovl1 (make-overlay beg bor))
       (overlay-put ovl1 'smart 'recipe-prefix)
       (overlay-put ovl1 'face smart-mode-recipe-indent-face)
-      (overlay-put ovl1 'read-only t))
+      (overlay-put ovl1 'read-only t)
+      (overlay-put ovl1 'invisible t) ;; replaced the tab with line-prefix
+      (overlay-put ovl1 'line-prefix 
+                   (propertize (format-spec smart-mode-recipe-prefix-format spec)
+                               'face 'smart-mode-recipe-prefix-face)))
+
     (unless ovl2
       (setq ovl2 (make-overlay bor end))
       (overlay-put ovl2 'smart 'recipe)
