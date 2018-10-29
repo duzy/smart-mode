@@ -201,6 +201,7 @@
 
 (defconst smart-mode-recipe-call-regexs
   `(("\\$\\$" 0 font-lock-constant-face)
+    ("\\\\\\$" 0 font-lock-constant-face)
     ("[^$]\\(\\$\\)\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
      (1 font-lock-constant-face)
      (2 font-lock-builtin-face))
@@ -325,6 +326,25 @@
 
 (defconst smart-mode-recipe-lua-font-lock-keywords
   `(,@smart-mode-recipe-call-regexs))
+
+(defconst smart-mode-recipe-dockerfile-font-lock-keywords
+  `(("#.*?$" 0 font-lock-comment-face)
+
+    ;; keywords
+    (,(regexp-opt '("FROM" "MAINTAINER" "ENV" "RUN" "USER"
+                    "COPY" "WORKDIR" "CMD")
+                  'words)
+     (1 font-lock-keyword-face prepend))
+
+    ;; single quoted strings
+    ("'[^']*'"
+     (0 font-lock-string-face prepend))
+
+    ;; double quoted strings
+    ("\"[^\"]*\""
+     (0 font-lock-string-face prepend))
+
+    ,@smart-mode-recipe-call-regexs))
 
 ;;---- CUSTOMS -----------------------------------------------------------
 
@@ -516,7 +536,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-internal-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-c-scan (beg end)
@@ -524,7 +544,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-c-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-c++-scan (beg end)
@@ -532,7 +552,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-c++-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-shell-scan (beg end)
@@ -540,7 +560,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-shell-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-python-scan (beg end)
@@ -548,7 +568,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-python-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-perl-scan (beg end)
@@ -556,7 +576,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-perl-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-dialect-lua-scan (beg end)
@@ -564,7 +584,14 @@ mode. The format is passed to `format-spec' with the following format keys:
   (let ((keywords smart-mode-recipe-lua-font-lock-keywords))
     (remove-list-of-text-properties beg end '(font-lock-face face))
     (smart-mode-fontify-region beg end keywords))
-  ;; TODO: advanced scan code
+  ;; TODO: advanced code scanning
+  )
+
+(defun smart-mode-dialect-dockerfile-scan (beg end)
+  (let ((keywords smart-mode-recipe-dockerfile-font-lock-keywords))
+    (remove-list-of-text-properties beg end '(font-lock-face face))
+    (smart-mode-fontify-region beg end keywords))
+  ;; TODO: advanced code scanning
   )
 
 (defun smart-mode-default-scan (beg end &optional callonly)
@@ -1327,17 +1354,18 @@ Returns `t' if there's a next dependency line, or nil."
     (unless ovl1
       (setq ovl1 (make-overlay beg bor))
       (overlay-put ovl1 'smart 'recipe-prefix)
-      (overlay-put ovl1 'face smart-mode-recipe-indent-face)
+      ;;(overlay-put ovl1 'face smart-mode-recipe-indent-face)
       (overlay-put ovl1 'read-only t)
       (overlay-put ovl1 'invisible t) ;; replaced the tab with line-prefix
       (overlay-put ovl1 'line-prefix 
                    (propertize (format-spec smart-mode-recipe-prefix-format spec)
                                'face 'smart-mode-recipe-prefix-face)))
 
-    (unless ovl2
-      (setq ovl2 (make-overlay bor end))
-      (overlay-put ovl2 'smart 'recipe)
-      (overlay-put ovl2 'face smart-mode-recipe-face))
+    ;; (unless ovl2
+    ;;   (setq ovl2 (make-overlay bor end))
+    ;;   (overlay-put ovl2 'smart 'recipe)
+    ;;   (overlay-put ovl2 'face smart-mode-recipe-face))
+
     ;;(smart-mode-debug-message (format "recipe: %s" (buffer-substring bor (- eol 1))))
     t))
 
