@@ -420,7 +420,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   :group 'smart
   :version "22.1")
 
-(defun smart-mode-setup-font-locks ()
+(defun smart-mode-set-font-lock-defaults ()
   (setq-local font-lock-defaults `(smart-mode-font-lock-keywords t))
   (setq-local font-lock-unfontify-region-function 'smart-mode-unfontify-region)
   (setq-local font-lock-extend-region-functions '(smart-mode-extend-region))
@@ -455,7 +455,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   (list 'smart-semantic 'smart-dialect 'syntax-table)
   "Text properties used for code regions/tokens.")
 
-(defvar-local smart-mode-syntax-table
+(defvar smart-mode-syntax-table ;; see `makefile-mode-syntax-table'
   (let ((st (make-syntax-table)))
     (modify-syntax-entry ?\( "()    " st)
     (modify-syntax-entry ?\) ")(    " st)
@@ -469,11 +469,10 @@ mode. The format is passed to `format-spec' with the following format keys:
     (modify-syntax-entry ?\n ">     " st)
     (modify-syntax-entry ?= "." st)
     st)
-  "Syntax table used in `smart-mode'. (see `makefile-mode-syntax-table')")
+  "Syntax table used in `smart-mode'.")
 
-(defvar-local smart-mode-map ;; See `makefile-mode-map'
-  (let ((map (make-sparse-keymap))
-	(opt-map (make-sparse-keymap)))
+(defvar smart-mode-map ;; see `makefile-mode-map'
+  (let ((map (make-sparse-keymap)) (opt-map (make-sparse-keymap)))
     (define-key map "\M-p"     'smart-mode-previous-dependency)
     (define-key map "\M-n"     'smart-mode-next-dependency)
     ;;(define-key map "\C-h"     'smart-mode-delete-backward-char) ;; <backspace>
@@ -486,7 +485,7 @@ mode. The format is passed to `format-spec' with the following format keys:
     (define-key map "\C-a"     'smart-mode-ctrl-a) ;; C-a
     (define-key map "\C-e"     'smart-mode-ctrl-e) ;; C-e
     map)
-  "The keymap that is used in SMArt mode.")
+  "The keymap that is used in smart mode.")
 
 ;;---- COMPATIBILITY -----------------------------------------------------
 
@@ -1611,6 +1610,11 @@ Returns `t' if there's a next dependency line, or nil."
     (end-of-line 2))
   (point))
 
+(defun smart-mode-set-indent-defaults ()
+  (setq-local indent-line-function 'smart-mode-indent-line)
+  ;; Real TABs are important
+  (setq indent-tabs-mode t))
+
 ;;---- Comments ----------------------------------------------------------
 
 (defun smart-mode-setup-comment-handling ()
@@ -1619,7 +1623,7 @@ Returns `t' if there's a next dependency line, or nil."
   (setq-local comment-use-syntax nil)
   (setq-local comment-start-skip "#+[ \t]*")
   (setq-local comment-start "#")
-  ;;(setq-local comment-end "")
+  (setq-local comment-end "")
   (setq-local comment-region-function 'smart-mode-comment-region)
   (setq-local uncomment-region-function 'smart-mode-uncomment-region))
 
@@ -1647,23 +1651,26 @@ Returns `t' if there's a next dependency line, or nil."
 
 ;;---- MAJOR MODE --------------------------------------------------------
 
-;; ;;;###autoload
+;; Note that `autoload' is required to activate `smart-mode-map'.
+;;;###autoload
 (define-derived-mode smart-mode smart-mode-base-mode "smart"
-  "Major mode for editing SMArt scripts."
+  "Major mode for editing smart scripts.
+
+\\{smart-mode-map}"
   ;;:syntax-table smart-mode-syntax-table
 
-  (smart-mode-setup-font-locks)
+  ;;(use-local-map smart-mode-map)
+
+  (smart-mode-set-font-lock-defaults)
+  (smart-mode-set-indent-defaults)
   (smart-mode-setup-comment-handling)
-  (setq-local indent-line-function 'smart-mode-indent-line)
 
   ;;(setq-local syntax-propertize-function
   ;;            smart-mode-syntax-propertize-function)
   
   ;;(when (> (point-max) 256000)
   ;;  (smart-mode-highlight-buffer))
-
-  ;; Real TABs are important
-  (setq indent-tabs-mode t))
+  )
 
 ;;---- FONTIFICATION -----------------------------------------------------
 
