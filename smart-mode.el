@@ -14,6 +14,7 @@
 
 ;;; Code:
 ;;(require 'make-mode)
+;;(require 'mode-local)
 
 ;;---- GROUPS ------------------------------------------------------------
 
@@ -135,7 +136,7 @@
 
 (defconst smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
 
-(defvar smart-mode-highlight-useless-spaces t)
+(defvar-local smart-mode-highlight-useless-spaces t)
 (defconst smart-mode-default-font-lock-keywords ;; see `makefile-make-font-lock-keywords'
   (let ((keywords smart-mode-statement-keywords))
     `((,smart-mode-defineassign-regex
@@ -419,40 +420,42 @@ mode. The format is passed to `format-spec' with the following format keys:
   :group 'smart
   :version "22.1")
 
+(defun smart-mode-setup-font-locks ()
+  (setq-local font-lock-defaults `(smart-mode-font-lock-keywords t))
+  (setq-local font-lock-unfontify-region-function 'smart-mode-unfontify-region)
+  (setq-local font-lock-extend-region-functions '(smart-mode-extend-region))
+  (setq-local font-lock-support-mode nil) ;; avoid any conflicts
+  )
+
 ;;---- VARS --------------------------------------------------------------
 
 ;; The `font-lock-beg' and `font-lock-end' is actually private to
 ;; font-lock.el (see `font-lock-default-fontify-region' for details).
 (defvar font-lock-beg)
 (defvar font-lock-end)
+;;(make-variable-buffer-local 'font-lock-beg)
+;;(make-variable-buffer-local 'font-lock-end)
 
-(defvar smart-mode-debug-message-on nil)
+(defvar-local smart-mode-debug-message-on nil)
 
-(defvar smart-mode-inhibit-fontification nil)
-(defvar smart-mode-change-beg nil)
-(defvar smart-mode-change-end nil)
+(defvar-local smart-mode-inhibit-fontification nil)
+(defvar-local smart-mode-change-beg nil)
+(defvar-local smart-mode-change-end nil)
 
-(defvar smart-recipe-overlays nil
+(defvar-local smart-recipe-overlays nil
   "The smart-mode recipe overlays used in the current buffer.")
 
-(make-variable-buffer-local 'font-lock-beg)
-(make-variable-buffer-local 'font-lock-end)
-(make-variable-buffer-local 'smart-mode-change-beg)
-(make-variable-buffer-local 'smart-mode-change-end)
-(make-variable-buffer-local 'smart-mode-inhibit-fontification)
-(make-variable-buffer-local 'smart-recipe-overlays)
+(defvar-local smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
+(defvar-local smart-mode-recipe-face 'smart-mode-recipe-face)
 
-(defvar smart-mode-recipe-indent-face 'smart-mode-recipe-indent-face)
-(defvar smart-mode-recipe-face 'smart-mode-recipe-face)
-
-(defvar smart-mode-default-indent 4)
+(defvar-local smart-mode-default-indent 4)
 
 ;; NOTE: without 'syntax-table forward-word fails
-(defvar smart-mode-scan-properties
+(defvar-local smart-mode-scan-properties
   (list 'smart-semantic 'smart-dialect 'syntax-table)
   "Text properties used for code regions/tokens.")
 
-(defvar smart-mode-syntax-table
+(defvar-local smart-mode-syntax-table
   (let ((st (make-syntax-table)))
     (modify-syntax-entry ?\( "()    " st)
     (modify-syntax-entry ?\) ")(    " st)
@@ -468,7 +471,7 @@ mode. The format is passed to `format-spec' with the following format keys:
     st)
   "Syntax table used in `smart-mode'. (see `makefile-mode-syntax-table')")
 
-(defvar smart-mode-map ;; See `makefile-mode-map'
+(defvar-local smart-mode-map ;; See `makefile-mode-map'
   (let ((map (make-sparse-keymap))
 	(opt-map (make-sparse-keymap)))
     (define-key map "\M-p"     'smart-mode-previous-dependency)
@@ -1493,15 +1496,6 @@ Returns `t' if there's a next dependency line, or nil."
   ;;(smart-mode-debug-message "unfontify-region: beg(%S) end(%S)" beg end)
   nil)
 
-(defun smart-mode-comment-region (beg end &optional arg)
-  (smart-mode-debug-message "commeng-region: beg(%S) end(%S) arg(%S)" beg end arg))
-
-(defun smart-mode-uncomment-region (beg end &optional arg)
-  (smart-mode-debug-message "uncommeng-region: beg(%S) end(%S) arg(%S)" beg end arg))
-
-(defun smart-mode-comment-uncomment-region (beg end &optional arg)
-  (smart-mode-debug-message "commeng-uncomment-region: beg(%S) end(%S) arg(%S)" beg end arg))
-
 (defun smart-mode-goto-open-paren (bound end)
   "Goto the openning \"(\""
   (catch 'break
@@ -1617,6 +1611,28 @@ Returns `t' if there's a next dependency line, or nil."
     (end-of-line 2))
   (point))
 
+;;---- Comments ----------------------------------------------------------
+
+(defun smart-mode-setup-comment-handling ()
+  "Setup comment handling, see `newcomment.el'."
+  (interactive)  
+  (setq-local comment-use-syntax nil)
+  (setq-local comment-start-skip "#+[ \t]*")
+  (setq-local comment-start "#")
+  ;;(setq-local comment-end "")
+  (setq-local comment-region-function 'smart-mode-comment-region)
+  (setq-local uncomment-region-function 'smart-mode-uncomment-region))
+
+(defun smart-mode-comment-region (beg end &optional arg)
+  (smart-mode-debug-message "commeng-region: beg(%S) end(%S) arg(%S)" beg end arg)
+  ;; FIXME: (let* (comment-start "//") ...
+  (comment-region-default beg end arg))
+
+(defun smart-mode-uncomment-region (beg end &optional arg)
+  (smart-mode-debug-message "uncommeng-region: beg(%S) end(%S) arg(%S)" beg end arg)
+  ;; FIXME: (let* (comment-start "//") ...
+  (uncomment-region-default beg end arg))
+
 ;;---- POSITION ----------------------------------------------------------
 
 (defun smart-mode-line-beginning-position (&optional pos) ;; `line-beginning-position'
@@ -1636,28 +1652,9 @@ Returns `t' if there's a next dependency line, or nil."
   "Major mode for editing SMArt scripts."
   ;;:syntax-table smart-mode-syntax-table
 
-  (make-local-variable 'font-lock-defaults)
-  (make-local-variable 'font-lock-unfontify-region-function)
-  (make-local-variable 'font-lock-extend-region-functions)
-  (make-local-variable 'font-lock-support-mode)
-  (make-local-variable 'font-lock-defaults)
-  (make-local-variable 'comment-start-skip)
-  (make-local-variable 'comment-start)
-  (make-local-variable 'comment-end)
-  (make-local-variable 'comment-region-function)
-  (make-local-variable 'uncomment-region-function)
-  (make-local-variable 'indent-line-function)
-
-  (setq font-lock-defaults `(smart-mode-font-lock-keywords t)
-        font-lock-unfontify-region-function 'smart-mode-unfontify-region
-        font-lock-extend-region-functions '(smart-mode-extend-region)
-        font-lock-support-mode nil ;; avoid any conflicts
-        comment-start-skip "#+[ \t]*"
-        comment-start "#"
-        comment-end ""
-        comment-region-function 'smart-mode-comment-uncomment-region
-        uncomment-region-function 'smart-mode-comment-uncomment-region
-        indent-line-function 'smart-mode-indent-line)
+  (smart-mode-setup-font-locks)
+  (smart-mode-setup-comment-handling)
+  (setq-local indent-line-function 'smart-mode-indent-line)
 
   ;;(setq-local syntax-propertize-function
   ;;            smart-mode-syntax-propertize-function)
