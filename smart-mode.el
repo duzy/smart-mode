@@ -114,6 +114,10 @@
     "include"  "eval" "dock" "export")
   "List of keywords understood by smart as statements.")
 
+(defconst smart-mode-environments
+  `("import" "use" "files" "extensions" "include"  "eval" "export")
+  "List of environments.")
+
 (defconst smart-mode-statements--deprecated
   (concat "^\\s-*" (regexp-opt smart-mode-statement-keywords 'words))
   "Regex to match keywords understood by smart as statements.")
@@ -1429,7 +1433,7 @@ Returns `t' if there's a next dependency line, or nil."
        ((and (equal semantic 'recipe) (looking-at "^\t"))
         (forward-char))
        ((looking-at "[ \t]*\\()\\)")
-        (smart-mode-goto-open-paren (point-min) (match-beginning 1))))
+        (smart-mode-goto-open "(" ")" (point-min) (match-beginning 1))))
       (setq beg (point))
 
       (goto-char end) ;; the end of range
@@ -1495,32 +1499,60 @@ Returns `t' if there's a next dependency line, or nil."
   ;;(smart-mode-debug-message "unfontify-region: beg(%S) end(%S)" beg end)
   nil)
 
-(defun smart-mode-goto-open-paren (bound end)
-  "Goto the openning \"(\""
+(defun smart-mode-goto-open-obsolete (open close &optional beg end)
   (catch 'break
     (let ((rp) (result))
-      (while (search-backward "(" bound t)
+      (while (search-backward open beg t); `(`
         (save-excursion
           (if rp (goto-char rp))
-          (if (search-forward ")" end t) (setq rp (point))
+          (if (search-forward close end t); `)`
+              (setq rp (point))
             (throw 'break t)))))))
-
-(defun smart-mode-goto-close-paren (pos)
-  "Goto the closing \")\""
+(defun smart-mode-goto-close-obsolete (open close &optional beg end)
   (catch 'break
     (let ((lp) (result))
-      (while (search-forward ")" bound t)
+      (while (search-forward close beg t); `)`
         (save-excursion
           (if lp (goto-char lp))
-          (if (search-backward "(" end t) (setq lp (point))
+          (if (search-backward open end t); `(`
+              (setq lp (point))
             (throw 'break t)))))))
+
+;; C-M-n     forward-list  Move forward over a parenthetical group 
+;; C-M-p     backward-list  Move backward over a parenthetical group 
+;; C-M-f     forward-sexp Move forward over a balanced expression
+;; C-M-b     backward-sexp  Move backward over a balanced expression
+;;
+;; (global-set-key "%" 'smart-mode-match-paren)
+;; (defun smart-mode-match-paren (arg)
+;;   "Go to the matching paren if on a paren; otherwise insert %."
+;;   (interactive "p")
+;;   (cond ((looking-at "\\s(") (forward-list 1) (backward-char 1))
+;;         ((looking-at "\\s)") (forward-char 1) (backward-list 1))
+;;         (t (self-insert-command (or arg 1)))))
+(defun smart-mode-goto-open (open close &optional beg end)
+  (let ((n 0))
+    (when (looking-at close)
+      (setq n (- (match-end 0) (match-beginning 0)))
+      (forward-char n) (backward-sexp 1)
+      (looking-at open))))
+(defun smart-mode-goto-close (open close &optional beg end)
+  (let ((n 0))
+    (when (looking-at open)
+      (setq n (- (match-end 0) (match-beginning 0)))
+      (forward-sexp 1) (backward-char n)
+      (looking-at close))))
 
 (defun smart-mode-shell-dialect-indent-line ()
   (message "todo: shell-dialect-indent-line"))
+
 (defun smart-mode-indent-line ()
   (let ((semantic (get-text-property (point) 'smart-semantic))
-        (dialect (get-text-property (point) 'smart-dialect)))
-    
+        (dialect (get-text-property (point) 'smart-dialect))
+        (env-rx-beg (concat "^\\s-*" (regexp-opt smart-mode-environments 'symbols) "\\s-*\\((\\)"))
+        (env-rx-end "^\\s-*\\()\\)\\s-*\\(:?#.*?$\\)?")
+        (env nil) (env-pos nil) (env-beg nil) (env-end)
+        (indent nil) (pos (point)))
     (cond
 
      ;; Indent recipe line
@@ -1533,8 +1565,68 @@ Returns `t' if there's a next dependency line, or nil."
       (let ((func (intern-soft (format "smart-mode-%s-dialect-indent-line" dialect))))
         (if (and func (functionp func)) (funcall func)
           (message "ERROR: %s-dialect-indent-line unimplemented" dialect))))
-      
-     (t (message "trivial-indent-line: semantic(%S) dialect(%S)" semantic dialect)))))
+
+     ;; Looking at `[env] (`
+     ((save-excursion
+        (beginning-of-line)
+        (looking-at (concat "\\(:?^\\s-*\\<project\\>\\|" env-rx-beg "\\)")))
+      (indent-line-to 0))
+
+     ;; Looking at `)`, indent to env-rx-beg line
+     ((save-excursion (beginning-of-line)
+                      (and (looking-at env-rx-end) (setq env-end (point))))
+      (if (save-excursion
+            (goto-char env-end) ;;(forward-char 1)
+            (when (smart-mode-goto-open "(" ")"); `(`
+              (setq indent (current-indentation))))
+          (indent-line-to indent)
+        (indent-line-to 0)))
+
+     ;; Looking at ``
+     ((save-excursion
+        (beginning-of-line)
+        (looking-at "^\\s-*\\(:?#.*?\\)?$"))
+      (if (save-excursion
+            (when (re-search-backward "^\\s-*\\(:?.*?\\)\\s-*\\((\\)" nil t)
+              (setq env-pos (match-beginning 1)
+                    env-beg (match-beginning 2)
+                    indent (current-indentation))
+              (goto-char env-beg); go right before "("
+              (when (smart-mode-goto-close "(" ")")
+                (forward-char 1); go right after ")"
+                (and (< env-beg pos) (< pos (point))))))
+          (indent-line-to (+ indent 4))
+        (indent-line-to 1)))
+
+     ;; check if (point) is surrounded by (where [env] could be import, files, etc.):
+     ;;   [env] (
+     ;;     ....
+     ;;   )
+     ((save-excursion
+        (when (re-search-backward env-rx-beg nil t)
+          (setq env (match-string 1)
+                env-pos (match-beginning 1)
+                env-beg (match-beginning 2)
+                indent (current-indentation))
+          (goto-char env-beg); go right before "("
+          (when (smart-mode-goto-close "(" ")")
+            (forward-char 1); go right after ")"
+            ;; (message "%s %s %s\n%s|%s" env pos (point)
+            ;;          (buffer-substring env-beg pos)
+            ;;          (buffer-substring pos (point)))
+            (and (< env-beg pos) (< pos (point))))))
+      (indent-line-to (+ indent 4))
+      (when (save-excursion
+              (re-search-forward env-rx-end nil t))
+        ;;(setq env-end (match-end 1))
+        (when nil ;;(and (< env-beg pos) (< pos env-end))
+          ;;(message "%s %s [%s %s] %s %s" indent env-pos env-beg env-end env pos (match-string 1))
+          (indent-line-to (+ indent 4)))))
+
+     ;; Advance indentation
+     (t
+      (message "indent-trivial-line: semantic(%S) dialect(%S)" semantic dialect)
+      ))))
 
 (defun smart-mode-indent-line_ ()
   (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
@@ -1545,7 +1637,7 @@ Returns `t' if there's a next dependency line, or nil."
         ;;(message "indent-line: files semantic(%s)" (get-text-property (point) 'smart-semantic))
         (let (indent)
           (save-excursion
-            (when (smart-mode-goto-open-paren (point-min) (match-beginning 1))
+            (when (smart-mode-goto-open "(" ")" (point-min) (match-beginning 1))
               (setq indent (if (save-excursion (beginning-of-line)
                                                (looking-at smart-mode-statements))
                                0 smart-mode-default-indent))))
@@ -1573,7 +1665,7 @@ Returns `t' if there's a next dependency line, or nil."
         (let ((bound (point-min)) (indent) (lp) (rp (match-end 1)))
           ;;(message "indent-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
           (save-excursion
-            (when (smart-mode-goto-open-paren bound (match-beginning 1))
+            (when (smart-mode-goto-open "(" ")" bound (match-beginning 1))
               (if (save-excursion (beginning-of-line)
                                   (looking-at smart-mode-statements))
                   (setq lp (point) indent 0)
