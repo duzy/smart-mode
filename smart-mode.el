@@ -1152,7 +1152,10 @@ Returns `t' if there's a next dependency line, or nil."
         (smart-mode-remove-recipe-overlays (point))
         ;; Insert new recipe (\t) after dependency
         ;; Can't use '(newline) (insert "\t")' here!
-        (insert "\n\t"))
+        (insert "\n"); starts a new line
+        (setq pos (point)); recipe position
+        (insert "\t"); starts a recipe line, see `smart-mode-indent-line'
+        (smart-mode-put-recipe-overlays pos (point)))
        
        ((looking-at "^") ;; empty line, e.g. "^$"
         (newline nil t));;(insert-string "\n"))
@@ -1164,7 +1167,10 @@ Returns `t' if there's a next dependency line, or nil."
        ((and (looking-at-bol "^\t" -1)
              ;;(looking-at-bol "^\t" 1)
              )
-        (insert "\n\t"))
+        (insert "\n"); starts a new line
+        (let ((pos (point)))
+          (insert "\t"); starts a recipe line, see `smart-mode-indent-line'
+          (smart-mode-put-recipe-overlays pos (point))))
        
        ;; open a new line in general
        (t ;;(insert-string "\n") ;;(open-line 1) ;;(split-line)
@@ -1582,21 +1588,32 @@ Returns `t' if there's a next dependency line, or nil."
           (indent-line-to indent)
         (indent-line-to 0)))
 
-     ;; Looking at ``
+     ;; Looking at `` (empty lines)
      ((save-excursion
         (beginning-of-line)
         (looking-at "^\\s-*\\(:?#.*?\\)?$"))
-      (if (save-excursion
-            (when (re-search-backward "^\\s-*\\(:?.*?\\)\\s-*\\((\\)" nil t)
-              (setq env-pos (match-beginning 1)
-                    env-beg (match-beginning 2)
-                    indent (current-indentation))
-              (goto-char env-beg); go right before "("
-              (when (smart-mode-goto-close "(" ")")
-                (forward-char 1); go right after ")"
-                (and (< env-beg pos) (< pos (point))))))
-          (indent-line-to (+ indent 4))
-        (indent-line-to 1)))
+      (cond
+       ((save-excursion
+          (when (re-search-backward "^\\s-*\\(:?.*?\\)\\s-*\\((\\)" nil t)
+            (setq env-pos (match-beginning 1)
+                  env-beg (match-beginning 2)
+                  indent (current-indentation))
+            (goto-char env-beg); go right before "("
+            (when (smart-mode-goto-close "(" ")")
+              (forward-char 1); go right after ")"
+              (and (< env-beg pos) (< pos (point))))))
+        (indent-line-to (+ indent 4)))
+       ((save-excursion
+          (smart-mode-beginning-of-line 0)
+          (looking-at smart-mode-dependency-regex))
+        (if (eq ?\\ (char-before (1- (point)))); continual dependency line
+            (indent-line-to 4)
+          (let* ((pos (point)))
+            (insert "\t"); starts a new recipe line, see `smart-mode-newline-m'
+            (smart-mode-put-recipe-overlays pos (point)))))
+       (t
+        (message "todo: indent empty line...")
+        (indent-line-to 0))))
 
      ;; check if (point) is surrounded by (where [env] could be import, files, etc.):
      ;;   [env] (
