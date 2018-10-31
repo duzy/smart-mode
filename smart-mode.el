@@ -561,6 +561,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   ;; TODO: advanced code scanning
   )
 
+(defun smart-mode-dialect-sh-scan (beg end) (smart-mode-dialect-shell-scan beg end))
 (defun smart-mode-dialect-shell-scan (beg end)
   ;;(message "todo: scan shell dialect")
   (let ((keywords smart-mode-recipe-shell-font-lock-keywords))
@@ -1100,7 +1101,7 @@ Returns `t' if there's a next dependency line, or nil."
   ;;     (or (smart-mode-match-dependency (smart-mode-line-end-position))
   ;;         (progn (beginning-of-line) (looking-at-p "^[^\t].*?="))))
   ;;   (indent-line-to 0))
-  ;;  (t (insert-string "\t")))
+  ;;  (t (insert "\t")))
   (message "todo: tab-it"))
 
 (defun smart-mode-newline-j ()
@@ -1121,6 +1122,7 @@ Returns `t' if there's a next dependency line, or nil."
           dialect (or (get-text-property pos 'smart-dialect) 'internal))
     (message "newline-m: semantic(%s) dialect(%s)" semantic dialect)
     (cond
+     ;; Recipe newline.
      ((equal semantic 'recipe);;(and (equal semantic 'recipe) (looking-at-bol "^\t"))
       (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
       (if (and func (functionp func)) (funcall func is-eol)
@@ -1132,18 +1134,17 @@ Returns `t' if there's a next dependency line, or nil."
       (newline-and-indent)
       ;; Insert \\ if next line is ending with \\
       (unless (looking-at-eol "\\\\$" 1)
-        (save-excursion (insert " \\"))));;(insert-string " \\"))))
+        (save-excursion (insert " \\"))))
      ;; Cursor is in a "\\" line.
      ((looking-at-eol "\\\\$")
-      ;;(insert-string (if (looking-back "[ \t]") "\\" " \\"))
       (insert (if (looking-back "[ \t]") "\\" " \\"))
-      (newline-and-indent) (save-excursion (insert " ")));;(insert-string " ")))
+      (newline-and-indent) (save-excursion (insert " ")))
      
      ;; newline at the end of current line
      (is-eol
       (cond
        ((eq ?\\ (char-before))
-        (newline-and-indent) (save-excursion (insert " \\")));;(insert-string " \\")))
+        (newline-and-indent) (save-excursion (insert " \\")))
        
        ((let* ((pos (smart-mode-line-beginning-position))
                (semantic (get-text-property pos 'smart-semantic)))
@@ -1158,7 +1159,7 @@ Returns `t' if there's a next dependency line, or nil."
         (smart-mode-put-recipe-overlays pos (point)))
        
        ((looking-at "^") ;; empty line, e.g. "^$"
-        (newline nil t));;(insert-string "\n"))
+        (newline nil t))
        
        ((looking-back (concat smart-mode-statements "?[ \t]*([ \t]*$"))
         (newline-and-indent))
@@ -1173,7 +1174,7 @@ Returns `t' if there's a next dependency line, or nil."
           (smart-mode-put-recipe-overlays pos (point))))
        
        ;; open a new line in general
-       (t ;;(insert-string "\n") ;;(open-line 1) ;;(split-line)
+       (t ;;(insert "\n") ;;(open-line 1) ;;(split-line)
         (newline-and-indent))))
      
      (t (newline-and-indent)))))
@@ -1341,9 +1342,10 @@ Returns `t' if there's a next dependency line, or nil."
     (kill-line)))
 
 (defun smart-insert-mark-recipe (s)
-  (if s (insert s));;(insert-string s))
-  (smart-mode-put-recipe-overlays (line-beginning-position)
-                             (+ (smart-mode-line-end-position) 1)))
+  (if s (insert s))
+  (smart-mode-put-recipe-overlays
+   (line-beginning-position)
+   (+ (smart-mode-line-end-position) 1)))
 
 (defun smart-mode-remove-recipe-overlays (pos)
   (dolist (ovl (overlays-at pos))
@@ -1549,8 +1551,19 @@ Returns `t' if there's a next dependency line, or nil."
       (forward-sexp 1) (backward-char n)
       (looking-at close))))
 
+(defun smart-mode-sh-dialect-indent-line () (smart-mode-shell-dialect-indent-line))
 (defun smart-mode-shell-dialect-indent-line ()
-  (message "todo: shell-dialect-indent-line"))
+  (message "shell-dialect-indent-line")
+  (save-excursion
+    ;; Fix empty lines in recipes.
+    (while (progn (beginning-of-line 0)
+                  (looking-at "^\\s-*\\(:?#.*?\\)?$"))
+      (let ((pos (point)))
+        (insert "\t"); start recipe line
+        (smart-mode-put-recipe-overlays pos (point)))))
+  (let* ((pos (point)))
+    (insert "\t"); start recipe line
+    (smart-mode-put-recipe-overlays pos (point))))
 
 (defun smart-mode-indent-line ()
   (let ((semantic (get-text-property (point) 'smart-semantic))
@@ -1559,14 +1572,15 @@ Returns `t' if there's a next dependency line, or nil."
         (env-rx-end "^\\s-*\\()\\)\\s-*\\(:?#.*?$\\)?")
         (env nil) (env-pos nil) (env-beg nil) (env-end)
         (indent nil) (pos (point)))
+
     (cond
 
      ;; Indent recipe line
      ((string= semantic 'recipe)
       ;; Put recipe tab and overlay
-      (let ((pos (point)))
-        (insert "\t"); insert recipe tab
-        (smart-mode-put-recipe-overlays pos (point)))
+      ;; (let ((pos (point)))
+      ;;   (insert "\t"); insert recipe tab
+      ;;   (smart-mode-put-recipe-overlays pos (point)))
       ;; Find and call dialect indent-line
       (let ((func (intern-soft (format "smart-mode-%s-dialect-indent-line" dialect))))
         (if (and func (functionp func)) (funcall func)
