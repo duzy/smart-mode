@@ -128,7 +128,7 @@
 (defconst smart-mode-builtin-names
   `("print" "printl" "println" "plus" "minus" "string" "patsubst"
     "filter" "filter-out" "encode-base64" "decode-base64"
-    "base" "dir" "dirdir" "ndir"
+    "base"  "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
     "truncate" "link" "symlink"
     "read-dir" "read-file" "write-file")
@@ -152,6 +152,10 @@
 
       (,smart-mode-calling-regex 
        1 font-lock-variable-name-face prepend)
+
+      ;; ("\\(-[a-zA-Z0-9_\\-]*\\)\\(=\\W*\\)?"
+      ;;  (1 font-lock-comment-face prepend t)
+      ;;  (2 font-lock-constant-face prepend t))
 
       ;; Automatic variable references and single character variable
       ;; references, but not shell variables references.
@@ -1354,7 +1358,7 @@ Returns `t' if there's a next dependency line, or nil."
           (delete-overlay ovl)))))
 
 (defun smart-mode-put-recipe-overlays (beg end)
-  (let ((bor (+ beg 1)) (ovl1) (ovl2)
+  (let ((bor (+ beg 1)) (ovl1 nil) (ovl2 nil)
         ;; (spec `((?h . ,(substring hash 0 6))
         ;;         (?H . ,hash)
         ;;         (?a . ,(git-blame-get-info info 'author))
@@ -1363,8 +1367,10 @@ Returns `t' if there's a next dependency line, or nil."
         ;;         (?C . ,(git-blame-get-info info 'committer-mail))
         ;;         (?s . ,(git-blame-get-info info 'summary))))
         (spec `())) ; bor: begin of recipe
+
     ;;(dolist (ovl (overlays-at beg)) (message "put-recipe-overlays: 1.semantic(%S)" (overlay-get ovl 'smart-semantic)))
     ;;(dolist (ovl (overlays-at bor)) (message "put-recipe-overlays: 2.semantic(%S)" (overlay-get ovl 'smart-semantic)))
+
     (unless ovl1
       (setq ovl1 (make-overlay beg bor))
       (overlay-put ovl1 'smart 'recipe-prefix)
