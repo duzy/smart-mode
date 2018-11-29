@@ -77,12 +77,11 @@
   "Supported dialects by smart.")
 
 (defconst smart-mode-project-name-regex
-  ;;"\\(@\\|[[:alpha:]]\\(?:[a-zA-Z0-9_\\+]\\|-\\w\\)*\\)\\s-*\\(?:#.*?\\)?$"
-  "\\(@\\|[[:alpha:]]\\(?:[a-zA-Z0-9_\\+]\\|-\\b\\)*\\)\\s-*\\(?:#.*?\\)?$"
+  "\\(@\\|[[:alpha:]]\\(?:[[:alnum:]_\\+]\\|-\\b\\)*\\|\\s-*\\)\\s-*\\((.*?)\\)?\\s-*\\(?:#.*?\\)?$"
   "Regex matching project name")
 
 (defconst smart-mode-modifier-names
-  `("compare" "stdout" "stderr" "stdin" "sudo"
+  `("unclose" "compare" "stdout" "stderr" "stdin" "sudo"
     "update-file" "check" "check-file" "check-dir" 
     "cd" "env" "var"
     "grep-compare" "grep-dependents"
@@ -161,6 +160,8 @@
       ;; references, but not shell variables references.
       ("[^$][\\$\\&]\\([@%<?^+*_]\\|[a-zA-Z0-9]\\>\\)"
        1 font-lock-constant-face prepend)
+      ;;("^\\s-*:\\([\\$\\&][@%*]\\)"
+      ;; 1 'font-lock-keyword-face append)
       ("[^$]\\([\\$\\&][@%*]\\)"
        1 'smart-mode-targets-face append)
 
