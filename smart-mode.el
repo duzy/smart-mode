@@ -83,8 +83,8 @@
 (defconst smart-mode-modifier-names
   `("unclose" "cd" "env" "var" "eval"
     "compare" "stdout" "stderr" "stdin" "sudo"
-    "update-file" "configure-file"
-    "check" "check-file" "check-dir" 
+    "update-file" "check" "check-file" "check-dir" 
+    "configure" "configure-file" "extract-configuration"
     "grep-compare" "grep-dependents"
     ;;"plain" "dock"
     )
@@ -110,8 +110,8 @@
   "Supported dialects regexps by smart.")
 
 (defconst smart-mode-statement-keywords
-  `("project" "module" "configs" "import" "use" "files" "extensions"
-    "include"  "eval" "dock" "export")
+  `("project" "module" "package" "configs" "import" "use" "files"
+    "extensions" "include"  "eval" "dock" "export")
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-environments
@@ -610,10 +610,10 @@ mode. The format is passed to `format-spec' with the following format keys:
 (defun smart-mode-default-scan (beg end &optional callonly)
   ;;(message "default-scan: (%s)" (buffer-substring beg end))
   (save-excursion
-    (let (mb me ms dialect syntaxs closers parens ctxs drop 
-             indent indent-beg bol)
+    (let (mb me ms dialect syntaxs closers parens ctxs drop indent indent-beg bol)
       (remove-list-of-text-properties
        beg end '(font-lock-face face ,@(smart-mode-scan-properties)))
+
       (goto-char beg) ;; start from the beginning
 
       ;; ;; extending single character
@@ -690,6 +690,8 @@ mode. The format is passed to `format-spec' with the following format keys:
               (goto-char me))))
            ((string= ms "import")
             )
+           ((string= ms "include")
+            )
            ((string= ms "use")
             )
            ((string= ms "files")
@@ -706,7 +708,7 @@ mode. The format is passed to `format-spec' with the following format keys:
               (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
               (goto-char (match-end 0)))))))
 
-         ((and syntaxs (eq ?^ (car syntaxs))
+         ((and syntaxs (eq ?^ (car syntaxs)) ; VAR = ; VAR ?= ; VAR :=
                (looking-at "\\(!=\\|[*:+]?[:?]?=\\)[^>]"))
           (setq mb (match-beginning 1) me (match-end 1))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
@@ -719,15 +721,19 @@ mode. The format is passed to `format-spec' with the following format keys:
           (push ?= syntaxs) ;; assign
           (goto-char me))
 
+         ;; found ':', parsing rules, special include rules, etc.
          ((and syntaxs (eq ?^ (car syntaxs)) (looking-at "\\([:]\\)"))
           (setq mb (match-beginning 1) me (match-end 1))
-          (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
+          (put-text-property mb me 'font-lock-face 'font-lock-constant-face) ; the ':' char
           (setq me (match-end 0))
-          (goto-char bol) ;; go back to the beginning of line
-          (when (looking-at "^[ \t]*")
+          (goto-char bol) ;; go back to the beginning of rule line
+          (cond 
+           ;; rule targets, `include XXX:` is special that `include` is
+           ;; not changed here
+           ((looking-at "^[ \t]*\\(?:include[ \t]+\\)?")
             (let ((a (match-end 0)) (b mb))
               (put-text-property a b 'font-lock-face 'smart-mode-targets-face)
-              (put-text-property a b 'smart-semantic 'dependency)))
+              (put-text-property a b 'smart-semantic 'dependency))))
           (goto-char me) ;; go to the end of ":"
           (cond ((looking-at "[ \t]*$")
                  (push ?\t syntaxs) ;; recipe
