@@ -115,7 +115,7 @@
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-environments
-  `("import" "use" "files" "extensions" "include"  "eval" "export")
+  `("import" "use" "files" "extensions" "include"  "eval" "export" "configuration")
   "List of environments.")
 
 (defconst smart-mode-statements--deprecated
@@ -271,8 +271,8 @@
      (1 font-lock-type-face prepend))
 
     ;; keywords
-    (,(regexp-opt '("return" "break" "continue" "do" "while"
-                    "if" "else" "struct" "typedef")
+    (,(regexp-opt '("return" "break" "continue" "do" "while" "if" "else"
+                    "struct" "typedef" "static" "const")
                   'words)
      (1 font-lock-keyword-face prepend))
 
@@ -691,6 +691,8 @@ mode. The format is passed to `format-spec' with the following format keys:
            ((string= ms "import")
             )
            ((string= ms "include")
+            )
+           ((string= ms "configuration")
             )
            ((string= ms "use")
             )
