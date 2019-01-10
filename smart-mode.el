@@ -85,7 +85,7 @@
     "compare" "stdout" "stderr" "stdin" "sudo"
     "update-file" "check" "check-file" "check-dir" 
     "configure" "configure-file" "extract-configuration"
-    "grep-compare" "grep-dependents"
+    "grep-compare" "grep-files" "grep-dependencies"
     ;;"plain" "dock"
     )
   "List of names understood by smart as modifiers.")
