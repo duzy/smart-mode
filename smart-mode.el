@@ -665,6 +665,7 @@ mode. The format is passed to `format-spec' with the following format keys:
           (put-text-property mb me 'font-lock-face 'font-lock-comment-face)
           (put-text-property mb me 'smart-semantic 'comment))
 
+         ;; recipes
          ((and syntaxs (eq ?^ (car syntaxs)) (looking-back "^[ \t]*")
                (looking-at smart-mode-statements))
           (setq mb (match-beginning 0) me (match-end 0)
@@ -710,7 +711,8 @@ mode. The format is passed to `format-spec' with the following format keys:
               (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
               (goto-char (match-end 0)))))))
 
-         ((and syntaxs (eq ?^ (car syntaxs)) ; VAR = ; VAR ?= ; VAR :=
+         ;; VAR = ; VAR ?= ; VAR :=
+         ((and syntaxs (eq ?^ (car syntaxs))
                (looking-at "\\(!=\\|[*:+]?[:?]?=\\)[^>]"))
           (setq mb (match-beginning 1) me (match-end 1))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
@@ -796,7 +798,7 @@ mode. The format is passed to `format-spec' with the following format keys:
             (put-text-property mb (match-end 2) 'font-lock-face 'font-lock-warning-face))
           (goto-char (1+ (match-end 0))))
 
-         ;; left-paren of group
+         ;; left-paren of a group
          ((looking-at "(")
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
@@ -805,8 +807,10 @@ mode. The format is passed to `format-spec' with the following format keys:
             (smart-mode-put-text-indent indent-beg mb indent))
           (setq indent (+ indent smart-mode-default-indent)
                 indent-beg me)
-          (push (cons ?\( mb) parens) (forward-char)
-          (when (equal (car ctxs) ?\[)
+
+          (push (cons ?\( mb) parens) ;; push new openning paren
+          (forward-char) ; go after "("
+          (when (and (eq (car ctxs) ?\[) (eq (length parens) 1))
             (cond ((looking-at smart-mode-dialect-interpreters-regex)
                    (setq mb (match-beginning 1) me (match-end 1)
                          dialect (match-string 1))
@@ -852,9 +856,9 @@ mode. The format is passed to `format-spec' with the following format keys:
             ;;(message "%s %s" indent indent-beg)
             ;; this could be extending a ")" character
             (smart-mode-put-text-indent mb me (- indent smart-mode-default-indent)))
-          (pop parens) ;; pop a openning paren 
           (setq indent (- indent smart-mode-default-indent)
                 indent-beg (if parens mb))
+          (pop parens) ;; pop an openning paren
           (forward-char))
 
          ;; pair: key => value
@@ -893,6 +897,24 @@ mode. The format is passed to `format-spec' with the following format keys:
           (put-text-property me (1+ me) 'syntax-table (string-to-syntax "|"))
           (put-text-property mb me 'font-lock-face 'font-lock-string-face))
 
+         ;; path-seg: ~ . .. /
+         ((looking-at "\\(\\.\\.\\|[~\\./]\\)")
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-constant-face)
+          (goto-char (match-end 0)))
+
+         ;; flags: -foo
+         ((looking-at "\\(-\\)\\(\\w*\\)")
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-comment-face) ; font-lock-constant-face
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'font-lock-comment-face)
+          (goto-char (match-end 0)))
+
+         ;; $@ $| $/ $^ $< $+ $. $?
+         ((looking-at "\\([$&]\\)\\([@|/<\\^\\+\\.\\?]\\)")
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-constant-face)
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'font-lock-variable-name-face)
+          (goto-char (match-end 0)))
+
+         ;; $(...    &(...
          ((looking-at "[$&]\\([({]?\\)")
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
