@@ -81,7 +81,7 @@
   "Regex matching project name")
 
 (defconst smart-mode-modifier-names
-  `("unclose" "cd" "env" "var" "eval" "value"
+  `("unclose" "cd" "env" "var" "set" "eval" "value"
     "compare" "stdout" "stderr" "stdin" "sudo"
     "update-file" "check" "check-file" "check-dir" 
     "configure" "configure-file" "extract-configuration"
@@ -846,7 +846,7 @@ mode. The format is passed to `format-spec' with the following format keys:
                    (put-text-property mb me 'font-lock-face 'font-lock-warning-face)
                    (goto-char (match-end 0))))))
 
-         ;; right-paren of group
+         ;; right-paren of groups
          ((and (not (member (car syntaxs) '(?$ ?,))) (looking-at ")"))
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
@@ -862,10 +862,10 @@ mode. The format is passed to `format-spec' with the following format keys:
           (forward-char))
 
          ;; pair: key => value
-         ((looking-at "\\(?:=>\\)")
+         ((looking-at "\\(?:=>\\)") ; "\\(?:=>\\|=\\)"
           (setq mb (match-beginning 0) me (match-end 0))
           (put-text-property mb me 'font-lock-face 'font-lock-constant-face)
-          (put-text-property mb me 'syntax-table (string-to-syntax "."))
+          ;;(put-text-property mb me 'syntax-table (string-to-syntax "."))
           (forward-char 2))
          
          ((looking-at "'") ;; FIXME: quote pairing is buggy
