@@ -248,7 +248,7 @@
 
     ;; preprocessors
     (,(concat "[ \t]*\\(#\\)[ \t]*"
-              (regexp-opt '("define" "if" "endif") 'words)
+              "\\(" (regexp-opt '("define" "if" "endif") 'words) "\\)"
               "[ \t]*\\(<.*?>\\|\".*?\"\\)?")
      (1 font-lock-preprocessor-face prepend)
      (2 font-lock-preprocessor-face prepend)
