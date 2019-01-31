@@ -308,7 +308,7 @@
      (0 font-lock-string-face prepend))
 
     ;; command switches/options
-    ("[ \t]\\(-\\{1,2\\}\\(?:\\w\\|-\\)*=\\w*\\)"
+    ("[ \t]\\(-\\{1,2\\}\\(?:\\w\\|-\\|_\\)*=\\w*\\)"
      (1 font-lock-string-face prepend))
     
     ;; builtins
@@ -902,8 +902,8 @@ mode. The format is passed to `format-spec' with the following format keys:
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-constant-face)
           (goto-char (match-end 0)))
 
-         ;; flags: -foo
-         ((looking-at "\\(-\\)\\(\\w*\\)")
+         ;; flags: -foo, -foo-bar, -foo_bar, ...
+         ((looking-at "\\s-\\(-\\)\\(\\(?:\\w\\|-\\|_\\)*\\)")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-comment-face) ; font-lock-constant-face
           (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'font-lock-comment-face)
           (goto-char (match-end 0)))
