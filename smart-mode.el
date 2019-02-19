@@ -42,7 +42,7 @@
   ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d) (see `makefile-dependency-regex')
   ;; "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
   ;;"^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)"
-  "^\\([^:\n]+\\)\\(:\\)"
+  "^\\([^:\n]+\\)\\(:\\)[^=]" ;; matching ':' except ':='
   "Regex used to find a dependency line in a smart file.")
 
 (defconst smart-mode-flag-regex
@@ -514,7 +514,7 @@ mode. The format is passed to `format-spec' with the following format keys:
     (define-key map "\C-k"     'smart-mode-kill-line) ;; kill to line end
     (define-key map "\C-j"     'smart-mode-newline-j) ;; C-j
     (define-key map "\C-m"     'smart-mode-newline-m) ;; C-m
-    (define-key map "\M-RET"     'smart-mode-newline-mm) ;; M-RET
+    ;;(define-key map "\M-RET"     'smart-mode-newline-mm) ;; M-RET
     ;;(define-key map "\t"       'smart-mode-tab-it)  ;; C-i or <tab>
     (define-key map "\C-a"     'smart-mode-ctrl-a) ;; C-a
     (define-key map "\C-e"     'smart-mode-ctrl-e) ;; C-e
@@ -1801,13 +1801,15 @@ Returns `t' if there's a next dependency line, or nil."
       ;; Find and call dialect indent-line
       (let ((func (intern-soft (format "smart-mode-%s-dialect-indent-line" dialect))))
         (if (and func (functionp func)) (funcall func)
-          (message "ERROR: %s-dialect-indent-line unimplemented" dialect))))
+          (message "ERROR: %s-dialect-indent-line unimplemented" dialect)))
+      t)
 
      ;; Looking at `[env] (`
      ((save-excursion
         (beginning-of-line)
         (looking-at (concat "\\(:?^\\s-*\\<project\\>\\|" env-rx-beg "\\)")))
-      (indent-line-to 0))
+      (indent-line-to 0)
+      t)
 
      ;; Looking at `)`, indent to env-rx-beg line
      ((save-excursion (beginning-of-line)
@@ -1817,14 +1819,28 @@ Returns `t' if there's a next dependency line, or nil."
             (when (smart-mode-goto-open "(" ")"); `(`
               (setq indent (current-indentation))))
           (indent-line-to indent)
-        (indent-line-to 0)))
+        (indent-line-to 0))
+      t)
 
-     ;; Looking at `` (empty lines)
+     ;; Indent empty lines: `^$`, '^:$', '^#...$'
      ((save-excursion
         (beginning-of-line)
         (looking-at "^\\s-*\\(:?#.*?\\)?$"))
       (cond
+       ;; Indent dependencies
        ((save-excursion
+          (smart-mode-beginning-of-line 0)
+          (looking-at smart-mode-dependency-regex))
+        (message "indent-line: #dependency semantic(%S) dialect(%S)" semantic dialect)
+        (if (eq ?\\ (char-before (1- (point)))); continual dependency line
+            (indent-line-to 4)
+          (let* ((pos (point)))
+            (insert "\t"); starts a new recipe line, see `smart-mode-newline-m'
+            (smart-mode-put-recipe-overlays pos (point))))
+        t)
+       ;; Indent lines inside paired '(' and ')'
+       ((save-excursion
+          ;; Checking if it's after '^:(' or '^('
           (when (re-search-backward "^\\s-*\\(:?.*?\\)\\s-*\\((\\)" nil t)
             (setq env-pos (match-beginning 1)
                   env-beg (match-beginning 2)
@@ -1833,18 +1849,14 @@ Returns `t' if there's a next dependency line, or nil."
             (when (smart-mode-goto-close "(" ")")
               (forward-char 1); go right after ")"
               (and (< env-beg pos) (< pos (point))))))
-        (indent-line-to (+ indent 4)))
-       ((save-excursion
-          (smart-mode-beginning-of-line 0)
-          (looking-at smart-mode-dependency-regex))
-        (if (eq ?\\ (char-before (1- (point)))); continual dependency line
-            (indent-line-to 4)
-          (let* ((pos (point)))
-            (insert "\t"); starts a new recipe line, see `smart-mode-newline-m'
-            (smart-mode-put-recipe-overlays pos (point)))))
+        (message "indent-line: #parens semantic(%S) dialect(%S)" semantic dialect)
+        (indent-line-to (+ indent 4))
+        t)
+       ;; Anything else
        (t
-        (message "todo: indent empty line...")
-        (indent-line-to 0))))
+        (message "indent-line: #empty semantic(%S) dialect(%S)" semantic dialect)
+        (indent-line-to 0)
+        t)))
 
      ;; check if (point) is surrounded by (where [env] could be import, files, etc.):
      ;;   [env] (
@@ -1863,18 +1875,20 @@ Returns `t' if there's a next dependency line, or nil."
             ;;          (buffer-substring env-beg pos)
             ;;          (buffer-substring pos (point)))
             (and (< env-beg pos) (< pos (point))))))
+      (message "indent-line: #inparens semantic(%S) dialect(%S)" semantic dialect)
       (indent-line-to (+ indent 4))
       (when (save-excursion
               (re-search-forward env-rx-end nil t))
         ;;(setq env-end (match-end 1))
         (when nil ;;(and (< env-beg pos) (< pos env-end))
           ;;(message "%s %s [%s %s] %s %s" indent env-pos env-beg env-end env pos (match-string 1))
-          (indent-line-to (+ indent 4)))))
+          (indent-line-to (+ indent 4))))
+      t)
 
      ;; Advance indentation
      (t
-      (message "indent-trivial-line: semantic(%S) dialect(%S)" semantic dialect)
-      ))))
+      (message "indent-line: #trivial semantic(%S) dialect(%S)" semantic dialect)
+      nil))))
 
 (defun smart-mode-indent-line_ ()
   (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
