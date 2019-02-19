@@ -142,7 +142,7 @@
     "filter" "filter-out" "encode-base64" "decode-base64"
     "base"  "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
-    "truncate" "link" "symlink"
+    "truncate" "link" "symlink" "configure-file"
     "wildcard" "read-dir" "read-file" "write-file")
   "List of names understood by smart as builtins.")
 
