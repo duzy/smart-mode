@@ -523,31 +523,6 @@ Returns `t' if there's a next dependency line, or nil."
   ;; TODO: advanced code scanning
   )
 
-(defun smart-mode-invalidate-default-range (beg end)
-  ;;(smart-mode-debug-message "invalidate-default: (%s)" (buffer-substring beg end))
-  (save-excursion
-    (goto-char beg) ;; the beginning of range
-    (smart-mode-beginning-of-line)
-    (let ((semantic (get-text-property (point) 'smart-semantic)))
-      ;;(smart-mode-debug-message "invalidate-default: semantic(%s)" semantic)
-      (cond
-       ;;((looking-at "^") (backward-char))
-       ((and (equal semantic 'recipe) (looking-at "^\t"))
-        (forward-char))
-       ((looking-at "[ \t]*\\()\\)")
-        (smart-mode-goto-open "(" ")" (point-min) (match-beginning 1))))
-      (setq beg (point))
-
-      (goto-char end) ;; the end of range
-      (cond 
-       ((looking-at "^") (backward-char))
-       ((looking-at "\\()\\)[ \t]*$") nil)
-       (t (smart-mode-end-of-continual-lines)))
-      (setq end (point))
-      ;;(smart-mode-debug-message "invalidate-default: semantic(%S) (%s)" semantic (buffer-substring beg end))
-      ))
-  (cons beg end))
-
 (defun smart-mode-invalidate-internal-recipe-range (beg end)
   (save-excursion
     (goto-char beg) ;; the beginning of recipe
