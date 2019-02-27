@@ -1578,7 +1578,7 @@ mode. The format is passed to `format-spec' with the following format keys:
    ;; key-value (pair) expressions: foo=bar
    ((looking-at "=")
     (goto-char (match-end 0))
-    (if (looking-at smart-mode-combine-delim)
+    (if (and (not (looking-at "[({]\\|")) (looking-at smart-mode-combine-delim))
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pair-sign-face)
       (smart-mode-default-scan-combine 'smart-mode-pair-value-face)))
