@@ -179,6 +179,20 @@
     ,(concat "(" smart-mode-dialect-interpreters-regex ".*?)"))
   "Supported dialects regexps by smart.")
 
+(defconst smart-mode-dialect-bash-builtins ; `smart-mode-recipe-shell-font-lock-keywords'
+  '("cd" "export" "test" "alias" "echo" "pushd" "popd" "shift")
+  "Bash dialect builtin names.")
+(defconst smart-mode-dialect-bash-builtins-regex
+  (regexp-opt smart-mode-dialect-bash-builtins 'words)
+  "Regex to match bash dialect builtin names.")
+(defconst smart-mode-dialect-bash-keywords
+  '("function" "do" "while" "done" "for" "exec" "exit"
+    "case" "esac" "if" "then" "else" "fi")
+  "Bash dialect keywords.")
+(defconst smart-mode-dialect-bash-keywords-regex
+  (regexp-opt smart-mode-dialect-bash-keywords 'words)
+  "Regex to match bash dialect keywords.")
+
 (defconst smart-mode-statement-keywords--deprecated
   `("project" "module" "package" "configs" "import" "use" "files"
     "extensions" "include"  "eval" "dock" "export" "configuration")
@@ -708,6 +722,31 @@ mode. The format is passed to `format-spec' with the following format keys:
   "Face to use for additionally highlighting Shell commands in Font-Lock mode."
   :group 'smart
   :version "22.1")
+
+(defface smart-mode-dialect-bash-punc-face
+  '((t :inherit font-lock-constant-face :weight bold))
+  "Face to used to highlight punctuations in Bash dialect."
+  :group 'smart)
+(defface smart-mode-dialect-bash-var-sign-face
+  '((t :inherit font-lock-constant-face :weight bold))
+  "Face to used to highlight variable sign $ in Bash dialect."
+  :group 'smart)
+(defface smart-mode-dialect-bash-var-name-face
+  '((t :inherit font-lock-variable-name-face :weight bold))
+  "Face to used to highlight command names in Bash dialect."
+  :group 'smart)
+(defface smart-mode-dialect-bash-command-name-face
+  '((t :inherit font-lock-function-name-face))
+  "Face to used to highlight command names in Bash dialect."
+  :group 'smart)
+(defface smart-mode-dialect-bash-builtin-name-face
+  '((t :inherit font-lock-builtin-face))
+  "Face to used to highlight builtin names in Bash dialect."
+  :group 'smart)
+(defface smart-mode-dialect-bash-keyword-face
+  '((t :inherit font-lock-keyword-face))
+  "Face to used to highlight keywords in Bash dialect."
+  :group 'smart)
 
 (defun smart-mode-set-font-lock-defaults ()
   (setq-local font-lock-defaults `(smart-mode-font-lock-keywords t))
@@ -2242,8 +2281,53 @@ mode. The format is passed to `format-spec' with the following format keys:
   (smart-mode-default-scan-recipe-shell))
 (defun smart-mode-default-scan-recipe-shell (); deprecates `smart-mode-dialect-shell-scan'
   (smart-mode-default-scan-recipe-bash))
-(defun smart-mode-default-scan-recipe-bash ()
-  (message "recipe: #bash %s" (buffer-substring (point) (line-end-position))))
+(defun smart-mode-default-scan-recipe-bash (); sees `smart-mode-recipe-shell-font-lock-keywords'
+  (message "recipe: #bash %s" (buffer-substring (point) (line-end-position)))
+  (let ((sema-begin (match-beginning 0)) (step (point)) (end (line-end-position))
+        (headword) (face) (pos))
+    (while (and (< (point) end) (< step end) (looking-at "[^#\n]"))
+      (cond
+       ((and (looking-back "\t") (looking-at "@")); the @ prefix
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "&&"); scan the &&
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-bash-var-sign-face)
+        (setq step (goto-char (match-end 0)))
+        (cond 
+         ((looking-at "\\w+"); variable name: $foobar
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-var-name-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at ".")
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+          (setq step (goto-char (match-end 0))))))
+       ((looking-at "[$&#\\-]"); $ & - etc.
+        (setq
+         pos (match-end 0); save the end point
+         face (cond
+               ;; comment: "#\\(?:\\\\n\t\\|[^\n]\\)*"
+               ((string= (match-string 0) "#") 'smart-mode-comment-face)
+               ;;((not headword) 'smart-mode-dialect-bash-command-name-face)
+               (t 'noface)))
+        (if (smart-mode-default-scan-expr face)
+            (setq step (if (< step (point)) (point) (1+ step)))
+          (setq step (goto-char pos))))
+       ((looking-at smart-mode-dialect-bash-builtins-regex)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-bash-builtin-name-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at smart-mode-dialect-bash-keywords-regex)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-bash-keyword-face)
+        (setq step (goto-char (match-end 0))))
+       ((and (not (looking-at "[$&#]\\|\\\\[$]"))
+             (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((< (point) end); anything else
+        (forward-char); just move one step forward
+        (setq step (1+ step)))))))
 
 (defun smart-mode-default-scan-recipe-python (); deprecates `smart-mode-dialect-python-scan'
   (message "recipe: #python %s" (buffer-substring (point) (line-end-position))))
