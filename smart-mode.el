@@ -157,7 +157,7 @@
   "Regex to match valid modifiers.")
 
 (defconst smart-mode-dialect-interpreters
-  `("shell" "sh" "python" "perl" "lua")
+  `("shell" "sh" "bash" "python" "perl" "lua")
   "Supported dialects by smart.")
 (defconst smart-mode-dialects
   `(,@smart-mode-dialect-interpreters
@@ -557,7 +557,7 @@ mode. The format is passed to `format-spec' with the following format keys:
   :group 'smart)
 
 (defface smart-mode-assign-face ; = := ::= != ?= += =+ -= -+= -=+
-  '((t :inherit font-lock-constant-face
+  '((t :inherit font-lock-constant-face :weight bold
        :background  "LightBlue1"))
   "Face to used to highlight assignment signs."
   :group 'smart)
@@ -1406,6 +1406,13 @@ mode. The format is passed to `format-spec' with the following format keys:
               (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
               (goto-char (line-end-position)))))
          ;;
+         ;; assignment statements: foo := ...
+         ((looking-at (concat "[ \t]*" smart-mode-assign-regex "[ \t]*"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+          (goto-char (match-end 0))
+          (smart-mode-default-scan-list 'noface)
+          (setq step (if (< step (point)) (point) (1+ step))))
+         ;;
          ;; special rules, e.g. :user:
          ((and (looking-back "^") (looking-at "\\(:\\)[^=]"))
           (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'dependency)
@@ -1935,21 +1942,23 @@ mode. The format is passed to `format-spec' with the following format keys:
   (when (looking-back "^[ \t]*"); at the beginning of line
     (if (looking-at "[ \t]+") (goto-char (match-end 0)))
     (and
-     (if (smart-mode-default-scan-expr 'smart-mode-pseg-face)
+     (if (smart-mode-default-scan-expr 'noface)
          t; Good to continue!
        (message "files-spec error#1: %s" (buffer-substring (point) (line-end-position)))
        nil); Nil on failure to stop!
      (let ((step (point)) (end (line-end-position)))
-       (if (looking-at (concat "[ \t]*" smart-mode-assign-regex "[ \t]*"))
-           (progn
-             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
-             (goto-char (match-end 0))
-             (smart-mode-default-scan-list 'noface))
+       (cond
+        ((looking-at (concat "[ \t]*" smart-mode-assign-regex "[ \t]*"))
+         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+         (goto-char (match-end 0))
+         (smart-mode-default-scan-list 'noface))
+        (t
          (put-text-property (match-beginning 1) end 'font-lock-face 'smart-mode-warning-face)
-         (goto-char end)); if
+         (goto-char end))); cond
        t)))); defun
 
 (defun smart-mode-default-scan-after-targets ()
+  (setq smart-mode-scan-dialect nil)
   (when (looking-at "[ \t]*\\(\\[\\)")
     (goto-char (match-beginning 1))
     (smart-mode-default-scan-modifiers)
@@ -2230,9 +2239,10 @@ mode. The format is passed to `format-spec' with the following format keys:
 
 (defun smart-mode-default-scan-recipe-sh (); deprecates `smart-mode-dialect-sh-scan'
   (smart-mode-default-scan-recipe-shell))
-
 (defun smart-mode-default-scan-recipe-shell (); deprecates `smart-mode-dialect-shell-scan'
-  (message "recipe: #shell %s" (buffer-substring (point) (line-end-position))))
+  (smart-mode-default-scan-recipe-bash))
+(defun smart-mode-default-scan-recipe-bash ()
+  (message "recipe: #bash %s" (buffer-substring (point) (line-end-position))))
 
 (defun smart-mode-default-scan-recipe-python (); deprecates `smart-mode-dialect-python-scan'
   (message "recipe: #python %s" (buffer-substring (point) (line-end-position))))
