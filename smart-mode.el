@@ -51,7 +51,8 @@
 
 (defconst smart-mode-flag-regex
   ;;"\\s-\\(\\-\\)\\(\\(?:\\w\\|[-_]\\)*\\)"
-  "\\(\\-+\\)\\(\\(?:\\w\\|[-_]\\)*\\)"
+  ;;"\\(\\-+\\)\\(\\(?:\\w\\|[-_]\\)*\\)"
+  "\\(\\-+\\)\\(\\(?:[[:alnum:]]\\|[-_]\\)*\\)"
   "Regex used to match a flag value, e.g. `-foo`, `-foo-bar`, `-foo_bar`")
 
 (defconst smart-mode-recipe-regex
