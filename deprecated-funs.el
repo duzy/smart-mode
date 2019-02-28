@@ -1,3 +1,17 @@
+;; Note that the first and second subexpression is used by font lock.
+(defconst smart-mode-defineassign-regex
+  ;; We used to match not just the varname but also the whole value
+  ;; (spanning potentially several lines).
+  ;; See `makefile-macroassign-regex'.
+  ;; "^ *\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=[ \t]*\\(\\(?:.+\\\\\n\\)*.+\\)\\|[*:+]?[:?]?=[ \t]*\\(\\(?:.*\\\\\n\\)*.*\\)\\)"
+  ;; "\\(?:^\\|^export\\|^override\\|:\\|:[ \t]*override\\)[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(?:!=\\|[*:+]?[:?]?=\\)"
+  "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(!=\\|[*:+]?[:?]?=\\)"
+  "Regex used to find macro assignment lines in a makefile.")
+
+(defconst smart-mode-calling-regex ; deprecated
+  "[^$][\\$\\&][({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
+  "Regex used to find $(macro) uses in a makefile.")
+
 (defcustom smart-mode-recipe-prefix-format
   "\t" ;;"%h %20A:"
   "The format of the prefix added to each recipe line in `smart-mode'
