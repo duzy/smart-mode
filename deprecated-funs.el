@@ -956,3 +956,181 @@ Returns `t' if there's a next dependency line, or nil."
         ;;(message "todo: rescan (%s) recipes (%s)" dialect
         ;;         (buffer-substring end (line-end-position)))
         ))))
+
+(defun smart-mode-put-text-indent (beg end &optional indent)
+  (unless indent (setq indent smart-mode-default-indent))
+  (put-text-property beg end 'left-margin indent))
+
+(defun smart-mode-scan-dependency-dialect (bound)
+  (save-excursion
+    (let ((dialect "none"))
+      (dolist (re smart-mode-dialect-regexs)
+        (while (re-search-forward re bound t)
+          ;;(message "%s: %s" (match-string 1) re)
+          (setq dialect (match-string 1))))
+      dialect)))
+
+(defun smart-mode-match-shell-function-end (_end)
+  "To be called as an anchored matcher by font-lock.
+The anchor must have matched the opening parens in the first group."
+  (let ((s (match-string-no-properties 1)))
+    ;; FIXME forward-sexp or somesuch would be better?
+    (if (setq s (cond ((string= s "(") ")")
+		      ((string= s "{") "}")
+		      ((string= s "[") "]")
+		      ((string= s "((") "))")
+		      ((string= s "{{") "}}")
+		      ((string= s "[[") "]]")))
+	(re-search-forward (concat "\\(.*\\)[ \t]*" s) (line-end-position) t))))
+
+(defun smart-mode-match-dependency (bound) ; see `makefile-match-dependency'
+  "Search for `smart-mode-dependency-regex' up to BOUND.
+Checks that the colon has not already been fontified, else we
+matched in a rule action."
+  (catch 'found
+    (let ((pt (point)))
+      (while (progn (skip-chars-forward smart-mode-dependency-skip bound)
+		    (< (point) (or bound (point-max))))
+	(forward-char)
+	(or (eq (char-after) ?=)
+	    (get-text-property (1- (point)) 'face)
+	    (if (> (line-beginning-position) (+ (point-min) 2))
+		(eq (char-before (line-end-position 0)) ?\\))
+	    (when (save-excursion
+		    (beginning-of-line)
+		    (looking-at smart-mode-dependency-regex))
+	      (save-excursion
+		(let ((deps-end (match-end 1))
+		      (match-data (match-data)))
+		  (goto-char deps-end)
+		  (skip-chars-backward " \t")
+		  (setq deps-end (point))
+		  (beginning-of-line)
+		  (skip-chars-forward " \t")
+		  ;; Alter the bounds recorded for subexp 1,
+		  ;; which is what is supposed to match the targets.
+		  (setcar (nthcdr 2 match-data) (point))
+		  (setcar (nthcdr 3 match-data) deps-end)
+		  (store-match-data match-data)))
+	      (end-of-line)
+	      (throw 'found (point)))))
+      (goto-char pt))
+    nil))
+
+(defun smart-recipe-dependency-line-p ()
+  "Predicte if current line is recipe or dependency line."
+  (save-excursion
+    (beginning-of-line)
+    (or (looking-at-p "^\t")
+        (smart-mode-match-dependency (smart-mode-line-end-position)))))
+
+(defun smart-mode-recipe-c++-match-include-name (bound)
+  (let ((pos (point)) (end (line-end-position)))
+    (cond ;; can use: (re-search-forward "..." end t)
+     ((looking-at "\\(<\\)\\([^>\n]+\\)\\(>\\)")
+      (setq pos (match-beginning 0) end (match-end 0))
+      (put-text-property pos end 'font-lock-face 'smart-mode-constant-face))
+     ((looking-at "\\(\"\\)\\([^\"\n]+\\)\\(\"\\)")
+      (setq pos (match-beginning 0) end (match-end 0))
+      (put-text-property pos end 'font-lock-face 'smart-mode-string-face))
+     (t ;; highlight invalid #include form
+      (put-text-property pos end 'font-lock-face 'smart-mode-warning-face)))))
+
+(defun smart-mode-indent-line_ ()
+  (message "indent-line: semantic(%S)" (get-text-property (point) 'smart-semantic))
+  (unless
+      (cond 
+       ;; indenting lines in parens, e.g. 'files (...)'
+       ((string= (get-text-property (point) 'smart-semantic) 'files)
+        ;;(message "indent-line: files semantic(%s)" (get-text-property (point) 'smart-semantic))
+        (let (indent)
+          (save-excursion
+            (when (smart-mode-goto-open "(" ")" (point-min) (match-beginning 1))
+              (setq indent (if (save-excursion (beginning-of-line)
+                                               (looking-at smart-mode-statements))
+                               0 smart-mode-default-indent))))
+          (if (null indent) (back-to-indentation)
+            (indent-line-to indent)))
+        t)
+
+       ;; ;; FIXME: indenting lines after opening statements, e.g. 'files ('
+       ;; ((and (looking-back "\\((\\)[ \t]*\n[ \t]*")
+       ;;       (save-excursion (beginning-of-line -1)
+       ;;                       (looking-at smart-mode-statements)))
+       ;;  (let ((indent smart-mode-default-indent))
+       ;;    (if (null indent) (back-to-indentation)
+       ;;      (indent-line-to indent)))
+       ;;  t)
+       
+       ;; indenting a recipe
+       ((string= (get-text-property (point) 'smart-semantic) 'recipe)
+        (back-to-indentation)
+        t)
+
+       ;; indenting a line starting with ")"
+       ((or (looking-at "[ \t]*\\()\\)")
+            (looking-back "^[ \t]*\\()\\)[ \t]*"))
+        (let ((bound (point-min)) (indent) (lp) (rp (match-end 1)))
+          ;;(message "indent-line: semantic(%s)" (get-text-property (point) 'smart-semantic))
+          (save-excursion
+            (when (smart-mode-goto-open "(" ")" bound (match-beginning 1))
+              (if (save-excursion (beginning-of-line)
+                                  (looking-at smart-mode-statements))
+                  (setq lp (point) indent 0)
+                (setq lp (point) indent (current-column)))))
+          (if (null indent) (back-to-indentation)
+            ;;(put-text-property (1+ lp) rp 'left-margin 
+            ;;                   (+ indent smart-mode-default-indent))
+            (indent-line-to indent)))
+        t)
+
+       ;; indenting a continual line "\"
+       ((save-excursion
+          (beginning-of-line)
+          (looking-back "\\\\\n")) ;; previous line ends with "\\"
+        (indent-line-to smart-mode-default-indent)
+        t)
+
+       ;; indenting lines beginning with "^\t" 
+       ((looking-at-bol "^\t")
+        t))
+     
+     ;; TODO: other indentation cases
+    (indent-to-left-margin)))
+
+(defun smart-mode-newline-m ()
+  (interactive)
+  (let ((semantic (get-text-property (point) 'smart-semantic))
+        (dialect (get-text-property (point) 'smart-dialect))
+        (pos (point)) (str "") (backnum) (func))
+    (unless
+        (cond
+         ;; Newline in a continual line.
+         ((looking-at ".*\\\\$")
+          (message "newline-m: #continual #semantic(%s) #dialect(%s)" semantic dialect)
+          ;;(if (looking-back "[ \t]") (insert "\\") (insert " \\"))
+          ;;(newline); (newline-and-indent)
+          (if (string= semantic 'recipe) (setq str "\t"))
+          (setq str (concat "\\\n" str " \\"))
+          (insert str)
+          (backward-char 2); go backward before " \" for quick editing
+          t)
+
+         ;; Newline right after the continual character (aka. '\').
+         ((looking-back "\\\\$")
+          (message "newline-m: #continual-tail #semantic(%s) #dialect(%s)" semantic dialect)
+          (if (string= semantic 'recipe) (setq str "\t"))
+          (setq str (concat "\n" str " \\"))
+          (insert str)
+          (backward-char 2); go backward before " \" for quick editing
+          t)
+
+         ;; Newline in dialect recipes.
+         ((equal semantic 'recipe)
+          (setq func (intern-soft (format "smart-mode-%s-recipe-newline" dialect)))
+          (if (and func (functionp func)) (funcall func)
+            (message "newline-m: undefined smart-mode-%s-recipe-newline (semantic(%s) dialect(%s))"
+                     dialect semantic dialect))))
+      (message "newline-m: #general semantic(%s) dialect(%s)" semantic dialect)
+      ;;(insert "\n") ;;(open-line 1) ;;(split-line)
+      (newline-and-indent))))
