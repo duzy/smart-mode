@@ -115,7 +115,7 @@
   "\\([[:alpha:]_][[:alnum:]_+-]*\\)"
   "Regex matching barewords")
 
-(defconst smart-mode-assign-regex ; ::= := != ?= =+ += -= -+= -=+
+(defconst smart-mode-assign-regex
   "\\(::=\\|[:!?+]=\\|[-]?[+]?=\\|-=+\\)"
   "Regex matching assignment signs")
 
@@ -1595,7 +1595,7 @@
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
       (setq step (goto-char (match-end 0))))
      ;; User expressions: user->xxx +=
-     ((looking-at "\\(user\\)\\(?:\\([=-]>\\)\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*\\([+?!]=\\|=\\+?\\)?\\)?\\(\\s-*\\)")
+     ((looking-at (concat "\\(user\\)\\(?:\\([=-]>\\)\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
       (smart-mode-match-set-face-goto 1 'font-lock-keyword-face)
       (smart-mode-match-set-face-goto 2 (if (string-equal (match-string 2) "=>") 'smart-mode-warning-face 'smart-mode-assign-face))
       (smart-mode-match-set-face-goto 3 'font-lock-variable-name-face)
