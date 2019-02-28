@@ -8,6 +8,18 @@
   "^[ \t]*\\([^ \n\t][^:#= \t\n]*\\)[ \t]*\\(!=\\|[*:+]?[:?]?=\\)"
   "Regex used to find macro assignment lines in a makefile.")
 
+;; Note that the first big subexpression is used by font lock.
+(defconst smart-mode-dependency-regex
+  ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d) (see `makefile-dependency-regex')
+  ;; "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
+  ;;"^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)"
+  "^\\([^:\n]+?\\)\\(:\\)[^=]" ;; matching ':' except ':='
+  "Regex used to find a dependency line in a smart file.")
+
+;;(defconst smart-mode-expr-delim-regex ; expression delimiter
+;;  "[ \t\n(){}:/\\\\*\\.,=\\-]"
+;;  "Regex used to match expression delimiters.")
+
 (defconst smart-mode-calling-regex ; deprecated
   "[^$][\\$\\&][({]\\([-a-zA-Z0-9_.]+\\|[@%<?^+*][FD]?\\)"
   "Regex used to find $(macro) uses in a makefile.")

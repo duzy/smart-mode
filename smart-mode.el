@@ -37,18 +37,6 @@
    ;; Change the syntax of a quoted newline so that it does not end a comment.
    ("\\\\\n" (0 "."))))
 
-;; Note that the first big subexpression is used by font lock.
-(defconst smart-mode-dependency-regex
-  ;; ;; Allow for two nested levels $(v1:$(v2:$(v3:a=b)=c)=d) (see `makefile-dependency-regex')
-  ;; "^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)\\(?:[ \t]*$\\|[^=\n]\\(?:[^#\n]*?;[ \t]*\\(.+\\)\\)?\\)"
-  ;;"^\\(\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[({]\\(?:\\$\\(?:[^({]\\|.[^\n$#})]+?[})]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#)}]\\)+?[})]\\|[^({]\\)\\|[^\n$#:=]\\)+?\\)\\(:\\)"
-  "^\\([^:\n]+?\\)\\(:\\)[^=]" ;; matching ':' except ':='
-  "Regex used to find a dependency line in a smart file.")
-
-;;(defconst smart-mode-expr-delim-regex ; expression delimiter
-;;  "[ \t\n(){}:/\\\\*\\.,=\\-]"
-;;  "Regex used to match expression delimiters.")
-
 (defconst smart-mode-url-schemes
   `("http" "https" "ftp" "mailto")
   "List of url schemes.")
@@ -2417,18 +2405,18 @@ Returns `t' if there's a next dependency line, or nil."
         (beginning-of-line)
         (looking-at "^\\s-*\\(:?#.*?\\)?$"))
       (cond
-       ;; Indent dependencies
-       ((save-excursion
-          (smart-mode-beginning-of-line 0)
-          (looking-at smart-mode-dependency-regex))
-        (message "indent-line: #dependency semantic(%S) dialect(%S)" semantic dialect)
-        (if (eq ?\\ (char-before (1- (point)))); continual dependency line
-            (indent-line-to 4)
-          (let* ((pos (point)))
-            (insert "\t"); starts a new recipe line, see `smart-mode-newline-m'
-            ;;(smart-mode-put-recipe-overlays pos (point))
-            ))
-        t)
+       ;; ;; Indent dependencies
+       ;; ((save-excursion
+       ;;    (smart-mode-beginning-of-line 0)
+       ;;    (looking-at smart-mode-dependency-regex))
+       ;;  (message "indent-line: #dependency semantic(%S) dialect(%S)" semantic dialect)
+       ;;  (if (eq ?\\ (char-before (1- (point)))); continual dependency line
+       ;;      (indent-line-to 4)
+       ;;    (let* ((pos (point)))
+       ;;      (insert "\t"); starts a new recipe line, see `smart-mode-newline-m'
+       ;;      ;;(smart-mode-put-recipe-overlays pos (point))
+       ;;      ))
+       ;;  t)
        ;; Indent lines inside paired '(' and ')'
        ((save-excursion
           ;; Checking if it's after '^:(' or '^('
