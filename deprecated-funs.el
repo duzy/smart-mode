@@ -1160,3 +1160,65 @@ matched in a rule action."
       (message "newline-m: #general semantic(%s) dialect(%s)" semantic dialect)
       ;;(insert "\n") ;;(open-line 1) ;;(split-line)
       (newline-and-indent))))
+
+(defun smart-mode-scan-recipe-c++ (beg end)
+  (let ((step beg))
+    (message "scan-recipe: #c++ %s" (buffer-substring beg end))
+    (while (and (< (point) end) (< step end) (looking-at "[^\n]"))
+      (cond
+       ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
+        (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+        (setq step (goto-char (match-end 0))))
+       ((and (looking-back "^\t") (looking-at "@")); the @ prefix
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "\\(\\\\\\)\n"); continual lines
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+        (setq step (goto-char (match-end 0))
+              end (line-end-position)))
+       ((looking-at "[{}]"); scan the &&
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "&&"); scan the &&
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); escaped variable signs: \$ $$
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "[$&]"); $ & etc.
+        (let ((pos (match-end 0)))
+          (if (smart-mode-scan-expr 'smart-mode-no-face)
+              (setq step (if (< step (point)) (point) (1+ step)))
+            (setq step (goto-char pos)))))
+       ((looking-at (concat "^[ \t]*\\(#\\)[ \t]*" smart-mode-dialect-c++-preprocessors-regex "[ \t]\\|\\s."))
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-preprocessor-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-c++-preprocessor-face)
+        (setq step (goto-char (match-end 2))))
+       ((looking-at smart-mode-dialect-c++-keywords-regex)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-keyword-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at smart-mode-dialect-c++-types-regex)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-type-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at (concat smart-mode-dialect-c++-builtins-regex "\\s-"))
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-builtin-name-face)
+        (setq step (goto-char (match-end 0))))
+       ;; ((and (looking-back (concat "\\(?:class\\|struct\\|" smart-mode-dialect-c++-types-regex "\\)[ \t]+.*?[^[:alpha:]_]"))
+       ;;       (looking-at (concat smart-mode-dialect-c++-identifier-regex "[ \t]*")))
+       ;;  (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-type-face)
+       ;;  (setq step (goto-char (match-end 0))))
+       ((and (looking-at (concat "\\(class\\|struct\\|typedef\\)[ \t]+"
+                                 ;;"__attribute__[ \t]*((" smart-mode-dialect-c++-identifier-regex "[ \t]*))"
+                                 smart-mode-dialect-c++-identifier-regex "[ \t]*")))
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-keyword-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-c++-type-face)
+        (setq step (goto-char (match-end 0))))
+       ((and (not (looking-at "[$&#]\\|\\\\[$]"))
+             (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((< (point) end); anything else
+        (forward-char); just move one step forward
+        (setq step (point)))))))
