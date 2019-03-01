@@ -951,6 +951,11 @@
       (put-text-property begin (point) 'font-lock-face 'smart-mode-string-face)
       t))
    ;;
+   ;; double quoted strings: "...$(foo)..."
+   ((looking-at "\"")
+    (if (smart-mode-scan-compound)
+        (smart-mode-scan-combine suggested-face)))
+   ;;
    ;; unescaped [$&]: $@ $(...) &(...) ${...}
    ((or (and (looking-back "[^$\\]") (looking-at "[$]"))
         (and (looking-back "[^\\]" ) (looking-at "[&]")))
@@ -1113,9 +1118,6 @@
 (defun smart-mode-scan-comment ()
   (when (looking-at comment-start) ;; #
     (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "<"))
-    ;;(smart-mode-end-of-continual-lines) ; the end of comment
-    ;;(put-text-property (match-beginning 0) (point) 'font-lock-face 'smart-mode-comment-face)
-    ;;(put-text-property (match-beginning 0) (point) 'smart-semantic 'comment)
     (goto-char (match-end 0))
     (let ((begin (match-beginning 0)) (lastpoint (match-beginning 0))
           (step (point)) (end (line-end-position)))
@@ -1148,6 +1150,30 @@
       (put-text-property begin (point) 'smart-semantic 'comment))
     (put-text-property (point) (point) 'syntax-table (string-to-syntax ">"))
     t))
+
+(defun smart-mode-scan-compound () ; "...$(foo)..."
+  (when (looking-at "\"")
+    (let ((lastpoint (match-beginning 0)) (step (point))
+          (end (line-end-position)) (done) (pos))
+      (put-text-property lastpoint (match-end 0) 'syntax-table (string-to-syntax "("))
+      (setq step (goto-char (match-end 0)))
+      (while (and (< step end) (< (point) end) (not done))
+        (cond
+         ((looking-at "\\(?:\\\\.\\|[^\"$&]\\)+"); escapes \" \$ etc
+          (setq step (goto-char (match-end 0))))
+         ((looking-at "[$&]")
+          (if (< lastpoint (match-beginning 0))
+              (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-string-face))
+          (setq pos (match-end 0))
+          (smart-mode-scan-call)
+          (setq step (if (< pos (point)) (point) (goto-char pos))
+                lastpoint (point)))
+         ((looking-at "\""); the paired "
+          (setq step (goto-char (match-end 0)) done t))))
+      (when (< lastpoint (point))
+        (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-string-face))
+      (put-text-property (point) (point) 'syntax-table (string-to-syntax ")"))
+      done)))
 
 (defun smart-mode-scan-call () ; $(...), &(...), etc.
   (cond
