@@ -91,7 +91,7 @@
   "Regex matching barewords")
 
 (defconst smart-mode-assign-regex
-  "\\(::=\\|[:!?+]=\\|\\-\\+?=\\|\\-?=\\+\\)"
+  "\\(::=\\|[:!?+]=\\|\\-\\+?=\\|\\-?=\\+\\|=\\)"
   "Regex matching assignment signs")
 
 (defconst smart-mode-comment-todos
@@ -148,7 +148,7 @@
 (defconst smart-mode-dialects
   `(,@smart-mode-dialect-interpreters
     "c" "c++" "go" "json" "yaml" "xml" "text"
-    "makefile" "dockerfile" "iptables")
+    "dockerfile" "makefile" "iptables")
   "Supported dialects by smart.")
 (defconst smart-mode-dialect-interpreters-regex
   (concat "\\s-*" (regexp-opt smart-mode-dialect-interpreters 'words))
@@ -164,27 +164,27 @@
     ,(concat "(" smart-mode-dialect-interpreters-regex ".*?)"))
   "Supported dialects regexps by smart.")
 
-(defconst smart-mode-dialect-bash-builtins ; `smart-mode-recipe-shell-font-lock-keywords'
+(defconst smart-mode-bash-builtins ; `smart-mode-recipe-shell-font-lock-keywords'
   '("cd" "export" "test" "alias" "echo" "pushd" "popd" "shift")
   "Bash dialect builtin names.")
-(defconst smart-mode-dialect-bash-builtins-regex
-  (regexp-opt smart-mode-dialect-bash-builtins 'words)
+(defconst smart-mode-bash-builtins-regex
+  (regexp-opt smart-mode-bash-builtins 'words)
   "Regex to match bash dialect builtin names.")
-(defconst smart-mode-dialect-bash-keywords
+(defconst smart-mode-bash-keywords
   '("function" "do" "while" "done" "for" "exec" "exit"
     "case" "esac" "if" "then" "else" "fi")
   "Bash dialect keywords.")
-(defconst smart-mode-dialect-bash-keywords-regex
-  (regexp-opt smart-mode-dialect-bash-keywords 'words)
+(defconst smart-mode-bash-keywords-regex
+  (regexp-opt smart-mode-bash-keywords 'words)
   "Regex to match bash dialect keywords.")
 
-(defconst smart-mode-dialect-c++-scoping-keywords
+(defconst smart-mode-c++-scoping-keywords
   '("private" "protected" "public")
   "C++ dialect scoping keywords.")
-(defconst smart-mode-dialect-c++-scoping-keywords-regex
-  (regexp-opt smart-mode-dialect-c++-scoping-keywords 'words)
+(defconst smart-mode-c++-scoping-keywords-regex
+  (regexp-opt smart-mode-c++-scoping-keywords 'words)
   "Regex to match c++ dialect scoping keywords.")
-(defconst smart-mode-dialect-c++-keywords
+(defconst smart-mode-c++-keywords
   '("asm" "auto" "break" "case" "catch" "class" "const"
     "const_cast" "continue" "default" "delete" "do" "dynamic_cast"
     "else" "enum" "explicit" "export" "extern" "for" "friend"
@@ -198,38 +198,45 @@
     "and" "and_eq" "bitand" "bitor" "compl" "not" "not_eq"
     "or" "or_eq" "xor" "xor_eq")
   "C++ dialect keywords.")
-(defconst smart-mode-dialect-c++-keywords-regex
-  (regexp-opt smart-mode-dialect-c++-keywords 'words)
+(defconst smart-mode-c++-keywords-regex
+  (regexp-opt smart-mode-c++-keywords 'words)
   "Regex to match c++ dialect keywords.")
-(defconst smart-mode-dialect-c++-types
+(defconst smart-mode-c++-types
   '("bool" "char" "double" "float" "int" "long" "signed"
     "unsigned" "void" "wchar_t")
   "C++ dialect type names.")
-(defconst smart-mode-dialect-c++-types-regex
-  (regexp-opt smart-mode-dialect-c++-types 'words)
+(defconst smart-mode-c++-types-regex
+  (regexp-opt smart-mode-c++-types 'words)
   "Regex to match c++ dialect builtin names.")
-(defconst smart-mode-dialect-c++-preprocessors
+(defconst smart-mode-c++-preprocessors
   '("define" "error" "endif" "if" "ifdef" "ifndef"
     "include" "pragma" "undef")
   "C++ dialect preprocessor names.")
-(defconst smart-mode-dialect-c++-preprocessors-regex
-  (regexp-opt smart-mode-dialect-c++-preprocessors 'words)
+(defconst smart-mode-c++-preprocessors-regex
+  (regexp-opt smart-mode-c++-preprocessors 'words)
   "Regex to match c++ dialect preprocessor names.")
-(defconst smart-mode-dialect-c++-builtins
+(defconst smart-mode-c++-builtins
   '("print" "printf") ; "true" "false"
   "C++ dialect builtin names.")
-(defconst smart-mode-dialect-c++-builtins-regex
-  (regexp-opt smart-mode-dialect-c++-builtins 'words)
+(defconst smart-mode-c++-builtins-regex
+  (regexp-opt smart-mode-c++-builtins 'words)
   "Regex to match c++ dialect builtin names.")
-(defconst smart-mode-dialect-c++-attributes
+(defconst smart-mode-c++-attributes
   '("print" "printf") ; "true" "false"
   "C++ dialect attribute names.")
-(defconst smart-mode-dialect-c++-attributes-regex
-  (regexp-opt smart-mode-dialect-c++-attributes 'words)
+(defconst smart-mode-c++-attributes-regex
+  (regexp-opt smart-mode-c++-attributes 'words)
   "Regex to match c++ dialect attribute.")
-(defconst smart-mode-dialect-c++-identifier-regex
+(defconst smart-mode-c++-identifier-regex
   "\\([[:alpha:]_][[:alnum:]_]*\\)"
   "Regex to match c++ dialect identifiers.")
+
+(defconst smart-mode-dockerfile-keywords
+  '("FROM" "MAINTAINER" "ENV" "RUN" "USER" "COPY" "WORKDIR" "CMD")
+  "Bash dialect keywords.")
+(defconst smart-mode-dockerfile-keywords-regex
+  (regexp-opt smart-mode-dockerfile-keywords 'words)
+  "Regex to match bash dialect keywords.")
 
 (defconst smart-mode-statement-keywords
   `("configs" "import" "use" "files" "extensions" "include"
@@ -524,79 +531,108 @@
   "Face to use for highlighting leading spaces in Font-Lock mode."
   :group 'smart)
 
-(defface smart-mode-dialect-text-punc-face
+(defface smart-mode-text-punc-face
   '((t :inherit font-lock-constant-face)); :weight bold
   "Face to used to highlight punctuations in text dialect."
   :group 'smart)
-(defface smart-mode-dialect-text-var-sign-face
+(defface smart-mode-text-var-sign-face
   '((t :inherit smart-mode-call-sign-face)); :weight bold
   "Face to used to highlight variable sign $ in text dialect."
   :group 'smart)
 
-(defface smart-mode-dialect-bash-punc-face
+(defface smart-mode-bash-punc-face
   '((t :inherit font-lock-constant-face :weight bold))
   "Face to used to highlight punctuations in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-var-sign-face
+(defface smart-mode-bash-var-sign-face
   '((t :inherit smart-mode-call-sign-face :weight bold))
   "Face to used to highlight variable sign $ in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-var-name-face
+(defface smart-mode-bash-var-name-face
   '((t :inherit font-lock-variable-name-face :weight bold))
   "Face to used to highlight command names in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-substitution-face
+(defface smart-mode-bash-substitution-face
   '((t :inherit font-lock-string-face))
   "Face to used to highlight substitutions in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-command-name-face
+(defface smart-mode-bash-command-name-face
   '((t :inherit font-lock-function-name-face))
   "Face to used to highlight command names in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-builtin-name-face
+(defface smart-mode-bash-builtin-name-face
   '((t :inherit font-lock-builtin-face))
   "Face to used to highlight builtin names in Bash dialect."
   :group 'smart)
-(defface smart-mode-dialect-bash-keyword-face
+(defface smart-mode-bash-keyword-face
   '((t :inherit font-lock-keyword-face))
   "Face to used to highlight keywords in Bash dialect."
   :group 'smart)
 
-(defface smart-mode-dialect-c++-punc-face
+(defface smart-mode-c++-punc-face
   '((t :inherit font-lock-constant-face)); :weight bold
   "Face to used to highlight punctuations in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-type-face
+(defface smart-mode-c++-type-face
   '((t :inherit font-lock-type-face))
   "Face to used to highlight types in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-keyword-face
+(defface smart-mode-c++-keyword-face
   '((t :inherit font-lock-keyword-face))
   "Face to used to highlight keywords in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-preprocessor-face ; #xxxx
+(defface smart-mode-c++-preprocessor-face ; #xxxx
   '((t :inherit font-lock-preprocessor-face))
   "Face to used to highlight preprocessors in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-builtin-name-face
+(defface smart-mode-c++-builtin-name-face
   '((t :inherit font-lock-builtin-face))
   "Face to used to highlight builtins in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-var-name-face
+(defface smart-mode-c++-var-name-face
   '((t :inherit font-lock-variable-name-face))
   "Face to used to highlight variable names in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-function-name-face
+(defface smart-mode-c++-function-name-face
   '((t :inherit font-lock-function-name-face))
   "Face to used to highlight function names in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-macro-name-face ; FOOBAR
+(defface smart-mode-c++-macro-name-face ; FOOBAR
   '((t :inherit font-lock-constant-face))
   "Face to used to highlight preprocessors in c++ dialect."
   :group 'smart)
-(defface smart-mode-dialect-c++-string-face
+(defface smart-mode-c++-string-face
   '((t :inherit font-lock-string-face))
   "Face to used to highlight strings in c++ dialect."
+  :group 'smart)
+
+(defface smart-mode-dockerfile-keyword-face
+  '((t :inherit font-lock-keyword-face))
+  "Face to used to highlight keywords in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-string-face
+  '((t :inherit font-lock-string-face))
+  "Face to used to highlight strings in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-base-name-face
+  '((t :inherit font-lock-constant-face))
+  "Face to used to highlight env names in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-base-version-face
+  '((t :inherit font-lock-string-face))
+  "Face to used to highlight env names in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-env-name-face
+  '((t :inherit font-lock-variable-name-face))
+  "Face to used to highlight env names in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-env-value-face
+  '((t :inherit font-lock-string-face))
+  "Face to used to highlight env values in dockerfile."
+  :group 'smart)
+(defface smart-mode-dockerfile-punc-face
+  '((t :inherit font-lock-comment-face))
+  "Face to used to highlight puncuations in dockerfile."
   :group 'smart)
 
 (defun smart-mode-set-font-lock-defaults ()
@@ -1686,8 +1722,8 @@
          (when (looking-at "\t"); continue next recipe if any
            (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-           (setq step (goto-char (match-end 0))
-                 end (line-end-position))))) ;; while>and
+           (setq step (goto-char (match-end 0)) end (line-end-position))
+           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0))))))) ;; while>and
       ;;(message "scan-recipes: #2 #dialect(%s) %s" smart-mode-scan-dialect (buffer-substring (point) end))
       (cond
        ((and (looking-back "^") (looking-at "[^\t]"))
@@ -1770,12 +1806,19 @@
 
 (defun smart-mode-scan-recipe-text (beg end)
   (let ((step beg) (pos))
-    ;;(message "scan-recipe: #text %s" (buffer-substring beg end))
-    (while (and (< step end) (< (point) end) (looking-at "[^\n]"))
+    ;;(message "scan-recipe: #text %s" (buffer-substring step end))
+    (while (and (< step end) (< (point) end));(looking-at "[^\n]")
+      ;;(message "scan-recipe: #text %s" (buffer-substring step end))
       (cond
-       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-text-punc-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-text-var-sign-face)
+       ;; ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
+       ;;  (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
+       ;;  (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+       ;;  (setq step (goto-char (match-end 0)) end (line-end-position))
+       ;;  (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
+       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); escaping variables: \$foobar $$foobar
+        ;;(put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-text-punc-face)
+        ;;(put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-text-var-sign-face)
+        (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-text-punc-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "[$&]"); $ &
         (setq pos (match-end 0)); save the end point
@@ -1786,12 +1829,9 @@
              (not (and (looking-back "[^\\\\][$&]")
                        (looking-at smart-mode-var-char-regex)))
              (looking-at "\\(?:[{(<|>)}:!?,/-]\\|\\s.\\|\\]\\|\\[\\)+"))
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-text-punc-face)
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-text-punc-face)
         (setq step (goto-char (match-end 0))))
-       ((< (point) end); anything else
-        (forward-char); just move one step forward
-        (setq step (point)))))))
-
+       ((setq step (goto-char (1+ (point)))))))))
 
 (defun smart-mode-scan-recipe-c (beg end); deprecates `smart-mode-dialect-c-scan'
   (let ((step beg))
@@ -1824,7 +1864,7 @@
         (setq step (if (< step (point)) (point) (1+ step))))
        ((and (not (looking-at "[$&#]\\|\\\\[$]"))
              (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
         (setq step (goto-char (match-end 0))))
        ((< (point) end); anything else
         (forward-char); just move one step forward
@@ -1859,7 +1899,7 @@
 (defun smart-mode-scan-cc-string (lang end)
   (when (looking-at "\"")
     (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "|"))
-    ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-string-face)
+    ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
     (let ((beg (match-beginning 0)) (step (goto-char (match-end 0))))
       ;;(message "scan-recipe: #cc-string(%s) %s" lang (buffer-substring beg end))
       (while (and (< step end) (< (point) end))
@@ -1869,7 +1909,7 @@
          ((looking-at "\""); end of scanning string
           (message "scan-recipe: #cc-string(%s) %s" lang (buffer-substring beg (match-end 0)))
           (put-text-property (match-beginning 0) (1+ (match-end 0)) 'syntax-table (string-to-syntax "|"))
-          (put-text-property beg (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-string-face)
+          (put-text-property beg (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
           (goto-char (match-end 0))
           (setq step end))
          ((setq step (goto-char (1+ (point))))))))))
@@ -1886,25 +1926,25 @@
           (goto-char (match-end 0))
           (setq step end))
          ((and (looking-back "^\t") (looking-at "#"))
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-preprocessor-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-preprocessor-face)
           (setq step (goto-char (match-end 0))))
          ((looking-at "\"")
           (smart-mode-scan-cc-string lang end)
           (setq step (if (< step (point)) (point) (1+ step))))
-         ((looking-at smart-mode-dialect-c++-identifier-regex)
+         ((looking-at smart-mode-c++-identifier-regex)
           (if name; already scanned and cached name
-              (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-macro-name-face)
+              (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-macro-name-face)
             (setq name (match-string 1)); cache name
             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face
-                               (if (string-match-p smart-mode-dialect-c++-preprocessors-regex name)
-                                   'smart-mode-dialect-c++-preprocessor-face
+                               (if (string-match-p smart-mode-c++-preprocessors-regex name)
+                                   'smart-mode-c++-preprocessor-face
                                  'smart-mode-warning-face)))
           (setq step (goto-char (match-end 0))))
          ((setq step (goto-char (1+ (point))))))))))
 
 (defun smart-mode-scan-cc-record (lang end)
   (when (looking-at "\\(class\\|struct\\)[^[:alnum:]_]")
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-keyword-face)
+    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
     (let ((beg (match-beginning 1)) (step (goto-char (match-end 1)))
           (kind (match-string 1)) (name) (pos))
       ;;(message "scan-recipe: #cc-record(%s) %s" lang (buffer-substring step end))
@@ -1918,7 +1958,7 @@
          ((looking-at "[ \t]+"); spaces
           (setq step (goto-char (match-end 0))))
          ((looking-at ";"); end of scanning
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
           (goto-char (match-end 0))
           (setq step end))
          ((looking-at "__attribute__")
@@ -1926,14 +1966,14 @@
           (smart-mode-scan-cc-attribute 'c++ end)
           ;;(setq step (if (< step (point)) (point) (1+ step)))
           (setq step (if (< (point) pos) (goto-char pos) (point))))
-         ((looking-at (concat smart-mode-dialect-c++-identifier-regex "[^[:alnum:]_]"))
+         ((looking-at (concat smart-mode-c++-identifier-regex "[^[:alnum:]_]"))
           (cond
-           ((string-match-p smart-mode-dialect-c++-keywords-regex (match-string 1))
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-keyword-face))
+           ((string-match-p smart-mode-c++-keywords-regex (match-string 1))
+            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face))
            ((not name)
             ;;(message "scan-recipe: #cc-record(%s) %s" lang (match-string 0))
             (setq name (match-string 1)); cache the record name
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-type-face))
+            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face))
            ((and name); already scanned and cached name
             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)))
           (setq step (goto-char (match-end 1))))
@@ -1945,7 +1985,7 @@
 
 (defun smart-mode-scan-cc-record-body (lang name end)
   (when (looking-at "{")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
     (let ((beg (match-beginning 0)) (step (goto-char (match-end 0)))
           (member-type-beg) (member-type-end); all
           (member-name-beg) (member-name-end); functions, variables, types
@@ -1969,16 +2009,16 @@
          ((looking-at ";")
           (cond
            ((and stop); ends scanning by ';' (after stop '}')
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (goto-char (match-end 0))
             (setq step end))
            ((and (not member-para-beg) member-name-beg member-name-end)
-            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-dialect-c++-var-name-face)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-var-name-face)
+            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-name-beg nil member-name-end nil
                   step (goto-char (match-end 0))))
            ((and member-para-beg member-para-end member-name-beg member-name-end)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-name-beg nil member-name-end nil
                   member-para-beg nil member-para-end nil
                   step (goto-char (match-end 0))))
@@ -1987,7 +2027,7 @@
          ((looking-at "(")
           (cond
            ((and member-name-beg member-name-end (not member-para-beg))
-            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-dialect-c++-function-name-face)
+            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-function-name-face)
             (setq member-para-beg (match-beginning 0))))
           (setq step (goto-char (match-end 0))))
          ((looking-at ")")
@@ -1999,23 +2039,23 @@
           (message "scan-recipe: #cc-record-body(%s) %s" lang (buffer-substring step end))
           (cond
            ((and member-body-beg)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-body-end (match-end 0)))
            ((not member-body-beg)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-c++-punc-face)
+            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq stop (match-end 0)))
            ((put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)))
           (setq step (goto-char (match-end 0))))
          ((looking-at (concat "\\(private\\|protected\\|public\\)[ \t]*\\(:\\)"))
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-keyword-face)
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
           (setq step (goto-char (match-end 0))))
-         ((or (looking-at (concat smart-mode-dialect-c++-types-regex "[ \t]*"))
+         ((or (looking-at (concat smart-mode-c++-types-regex "[ \t]*"))
               (and name (looking-at (concat "\\(" name "\\)[ \t]*"))))
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-c++-type-face)
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face)
           (setq member-type-beg (match-beginning 1) member-type-end (match-end 1)
                 step (goto-char (match-end 0)))
           ;; record member name
-          (if (looking-at (concat smart-mode-dialect-c++-identifier-regex "[ \t]*"))
+          (if (looking-at (concat smart-mode-c++-identifier-regex "[ \t]*"))
               (setq member-name-beg (match-beginning 1) member-name-end (match-end 1)
                     step (goto-char (match-end 0)))))
          ((setq step (goto-char (1+ (point))))))
@@ -2049,62 +2089,61 @@
         ;;   (setq step (goto-char (match-end 0))))
         )
        ((looking-at "&&"); scan the &&
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-bash-var-sign-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-var-sign-face)
         (setq step (goto-char (match-end 0)))
-        (cond 
+        (cond
          ((looking-at "\\w+"); variable name: $foobar
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-var-name-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
           (setq step (goto-char (match-end 0))))
          ((looking-at "{"); parameter substitution: ${...}
-          (smart-mode-scan-recipe-bash-substitution)
+          (smart-mode-scan-bash-substitution)
           (setq step (if (< step (point)) (point) (1+ step))))
          ((looking-at ".")
           (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
           (setq step (goto-char (match-end 0))))))
-       ((looking-at "[$&#\\-]"); $ & - etc.
-        (setq
-         pos (match-end 0); save the end point
-         face (cond
-               ;; comment: "#\\(?:\\\\n\t\\|[^\n]\\)*"
-               ((string= (match-string 0) "#") 'smart-mode-comment-face)
-               ;;((not headword) 'smart-mode-dialect-bash-command-name-face)
-               (t 'smart-mode-no-face)))
+       ((looking-at "[$&#]\\|[ \t]\\-"); $ & - etc.
+        (setq pos (match-end 0); save the end point
+              face (cond
+                    ;; comment: "#\\(?:\\\\n\t\\|[^\n]\\)*"
+                    ((string= (match-string 0) "#") 'smart-mode-comment-face)
+                    ;;((not headword) 'smart-mode-bash-command-name-face)
+                    (t 'smart-mode-no-face)))
         (if (smart-mode-scan-expr face)
             (setq step (if (< step (point)) (point) (1+ step)))
           (setq step (goto-char pos))))
-       ((looking-at (concat smart-mode-dialect-bash-builtins-regex "\\s-"))
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-bash-builtin-name-face)
+       ((looking-at (concat smart-mode-bash-builtins-regex "\\s-"))
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
         (setq step (goto-char (match-end 0))))
-       ((looking-at smart-mode-dialect-bash-keywords-regex)
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-bash-keyword-face)
+       ((looking-at smart-mode-bash-keywords-regex)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
         (setq step (goto-char (match-end 0))))
        ((and (not (looking-at "[$&#]\\|\\\\[$]"))
              (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
         (setq step (goto-char (match-end 0))))
        ((< (point) end); anything else
         (forward-char); just move one step forward
         (setq step (point)))))))
 
-(defun smart-mode-scan-recipe-bash-substitution ()
+(defun smart-mode-scan-bash-substitution ()
   "See http://tldp.org/LDP/abs/html/parameter-substitution.html"
   (when (looking-at "{")
     ;;(message "substitution: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
     (setq step (goto-char (match-end 0)))
     (let ((step (point)) (end (line-end-position)))
       (while (and (< step end) (< (point) end))
         ;;(message "substitution: (%s %s) %s" step end (buffer-substring step (line-end-position)))
         (cond
          ;; ((and nil (looking-at "{")); recursive substitution
-         ;;  (smart-mode-scan-recipe-bash-substitution)
+         ;;  (smart-mode-scan-bash-substitution)
          ;;  (setq step (if (< step (point)) (point) (1+ step))))
          ((looking-at "[}]"); the end!
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-punc-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
           (setq step (goto-char end)))
          ;; ${parameter}
          ;; ${parameter-default}, ${parameter:-default}
@@ -2122,28 +2161,97 @@
          ;; ${var/%Pattern/Replacement}
          ;; ${!varprefix*}, ${!varprefix@}
          ((looking-at "[^{:\\-=+?}]+")
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-var-name-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
           (setq step (goto-char (match-end 0))))
          ((looking-at "[^}]+")
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-bash-substitution-face)
+          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-substitution-face)
           (setq step (goto-char (match-end 0)))))))
     t))
 
-(defun smart-mode-scan-recipe-python (beg end); deprecates `smart-mode-dialect-python-scan'
+(defun smart-mode-scan-recipe-python (beg end); deprecates `smart-mode-python-scan'
   (let ((step beg))
     (message "scan-recipe: #python %s" (buffer-substring beg end))))
 
-(defun smart-mode-scan-recipe-perl (beg end); deprecates `smart-mode-dialect-perl-scan'
+(defun smart-mode-scan-recipe-perl (beg end); deprecates `smart-mode-perl-scan'
   (let ((step beg))
     (message "scan-recipe: #perl %s" (buffer-substring beg end))))
 
-(defun smart-mode-scan-recipe-lua (beg end); deprecates `smart-mode-dialect-lua-scan'
+(defun smart-mode-scan-recipe-lua (beg end); deprecates `smart-mode-lua-scan'
   (let ((step beg))
     (message "scan-recipe: #lua %s" (buffer-substring beg end))))
 
-(defun smart-mode-scan-recipe-dockerfile (beg end); deprecates `smart-mode-dialect-dockerfile-scan'
-  (let ((step beg))
-    (message "scan-recipe: #dockerfile %s" (buffer-substring beg end))))
+(defun smart-mode-scan-recipe-dockerfile (beg end)
+  (let ((step beg) (pos) (assign) (face))
+    ;;(message "scan-recipe: #dockerfile %s" (buffer-substring step end))
+    (while (and (< step end) (< (point) end) (looking-at "[^\n]"))
+      ;;(message "scan-recipe: #dockerfile %s" (buffer-substring step end))
+      (cond
+       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)\\([[:alpha:]_][[:alnum:]_]*\\)"); escaping variables: \$foobar $$foobar
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+        (put-text-property (match-beginning 2) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "\\$\\$\\|&&"); $$ &&
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "[$&]"); $ &
+        (setq pos (match-end 0)); save the end point
+        (if (smart-mode-scan-expr 'smart-mode-no-face)
+            (setq step (if (< step (point)) (point) (1+ step)))
+          (setq step (goto-char pos))))
+       ((looking-at "#[^\n]*")
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-back "^\t[ \t]*"); at the beginning
+        (cond
+         ((looking-at (concat "\\(FROM\\)[ \t]+"
+                              "\\([[:alpha:]_][[:alnum:]_]*\\)"
+                              "\\(:\\)"
+                              "\\([^# \t\n]*\\)"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-base-name-face)
+          (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+          (put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-base-version-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at (concat "\\(MAINTAINER\\)[ \t]+"
+                              "\\([^#\n]*\\)"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-string-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at (concat "\\(ENV\\)[ \t]+"
+                              "\\([[:alpha:]_][[:alnum:]_]*\\)"
+                              "\\(=\\)"));\\([^ \t\n]*\\)
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
+          (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+          ;;(put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-env-value-face)
+          (setq step (goto-char (match-end 0)) assign (match-beginning 3)))
+         ((looking-at (concat "\\(USER\\)[ \t]+"
+                              "\\([[:alpha:]_][[:alnum:]_]*\\)"
+                              "\\(:\\)"
+                              "\\([^# \t\n]*\\)"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-string-face)
+          (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+          (put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-string-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at (concat "\\(RUN\\)[ \t]+"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (setq step (goto-char (match-end 0)))
+          (smart-mode-scan-recipe-bash (point) end))
+         ((looking-at (concat smart-mode-dockerfile-keywords-regex "[ \t]+"))
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+          (setq step (goto-char (match-end 0))))))
+       ((looking-at "[^$&#\\\n]+"); any in-line characters
+        (cond
+         (assign (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-string-face))
+         (face (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)))
+        (setq step (goto-char (match-end 0))))
+       ((setq step (goto-char (1+ (point))))))); while>cond
+    ;; (when (looking-at "\n\\(\t\\)")
+    ;;   (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
+    ;;   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+    ;;   (setq step (goto-char (match-end 0)) end (line-end-position))
+    ;;   (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
+    )); defun>let
 
 (defun smart-mode-previous-dependency ()
   "Move point to the beginning of the previous dependency line.

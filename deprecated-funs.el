@@ -1222,3 +1222,27 @@ matched in a rule action."
        ((< (point) end); anything else
         (forward-char); just move one step forward
         (setq step (point)))))))
+
+(defun smart-mode-scan-recipe-text (beg end)
+  (let ((step beg) (pos))
+    ;;(message "scan-recipe: #text %s" (buffer-substring beg end))
+    (while (and (< step end) (< (point) end) (looking-at "[^\n]"))
+      (cond
+       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dialect-text-punc-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dialect-text-var-sign-face)
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "[$&]"); $ &
+        (setq pos (match-end 0)); save the end point
+        (if (smart-mode-scan-expr 'smart-mode-no-face)
+            (setq step (if (< step (point)) (point) (1+ step)))
+          (setq step (goto-char pos))))
+       ((and (not (looking-at (concat "[$&]\\|\\\\[$]")))
+             (not (and (looking-back "[^\\\\][$&]")
+                       (looking-at smart-mode-var-char-regex)))
+             (looking-at "\\(?:[{(<|>)}:!?,/-]\\|\\s.\\|\\]\\|\\[\\)+"))
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dialect-text-punc-face)
+        (setq step (goto-char (match-end 0))))
+       ((< (point) end); anything else
+        (forward-char); just move one step forward
+        (setq step (point)))))))
