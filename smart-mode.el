@@ -1343,7 +1343,7 @@
 
 (defun smart-mode-scan-statement-specs (stmt begin)
   "Scans statement specs line by line in `smart' editing mode."
-  (let ((spec (intern-soft (format "smart-mode-scan-%s-spec" stmt)))
+  (let ((spec (intern-soft (format "smart-mode-scan-spec-%s" stmt)))
         (spec-begin) (step (point)) (end (line-end-position)) (single))
     (if (looking-at "\\(?:[ \t]\\|\\\\\n\\)+"); spaces and \\\n
         (setq step (goto-char (match-end 0))))
@@ -1407,40 +1407,40 @@
       (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
       (setq step (goto-char end))))); defun>let
 
-(defun smart-mode-scan-import-spec ()
-  (when (looking-back "^[ \t]*"); at the beginning of line
+(defun smart-mode-scan-spec-import ()
+  (when (looking-back "^[ \t]*\\(?:import\\)?[ \t]*"); at the beginning of line
     (if (looking-at "[ \t]+") (goto-char (match-end 0)))
     (and
      (if (smart-mode-scan-expr 'smart-mode-pseg-face)
          t; Good to continue!
-       (message "import-spec error#1: %s" (buffer-substring (point) (line-end-position)))
+       (message "spec error#1: #import %s" (buffer-substring (point) (line-end-position)))
        nil); Nil on failure to stop!
      (smart-mode-scan-list 'smart-mode-no-face)))); defun>when>and
 
-(defun smart-mode-scan-files-spec ()
-  (when (looking-back "^[ \t]*"); at the beginning of line
+(defun smart-mode-scan-spec-files ()
+  (when (looking-back "^[ \t]*\\(?:files\\)?[ \t]*"); at the beginning of line
     (if (looking-at "[ \t]+") (goto-char (match-end 0)))
     (and
      (if (smart-mode-scan-expr 'smart-mode-pseg-face)
          t; Good to continue!
-       (message "files-spec error#1: %s" (buffer-substring (point) (line-end-position)))
+       (message "spec error#1: #files %s" (buffer-substring (point) (line-end-position)))
        nil); Nil on failure to stop!
      (when (looking-at "[ \t]*\\(=>\\)[ \t]*")
        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-arrow-face)
        (goto-char (match-end 0)))
      (if (smart-mode-scan-expr 'smart-mode-pseg-face)
          t; Good to continue!
-       (message "files-spec error#2: %s" (buffer-substring (point) (line-end-position)))
+       (message "spec error#2: #files %s" (buffer-substring (point) (line-end-position)))
        nil); Nil on failure to stop!
      t)))
 
-(defun smart-mode-scan-configuration-spec ()
-  (when (looking-back "^[ \t]*"); at the beginning of line
+(defun smart-mode-scan-spec-configuration ()
+  (when (looking-back "^[ \t]*\\(?:configuration\\)?[ \t]*"); at the beginning of line
     (if (looking-at "[ \t]+") (goto-char (match-end 0)))
     (and
      (if (smart-mode-scan-expr 'smart-mode-no-face)
          t; Good to continue!
-       (message "files-spec error#1: %s" (buffer-substring (point) (line-end-position)))
+       (message "spec error#1: #configuration %s" (buffer-substring (point) (line-end-position)))
        nil); Nil on failure to stop!
      (let ((step (point)) (end (line-end-position)))
        (cond
@@ -1452,6 +1452,28 @@
          (put-text-property (match-beginning 1) end 'font-lock-face 'smart-mode-warning-face)
          (goto-char end))); cond
        t)))); defun
+
+(defun smart-mode-scan-spec-eval ()
+  ;;(message "spec#0: #eval %s" (buffer-substring (point) (line-end-position)))
+  (when (looking-back "^[ \t]*\\(?:eval\\)?[ \t]*"); at the beginning of line
+    (if (looking-at "[ \t]+") (goto-char (match-end 0)))
+    (and
+     ;;(message "spec#1: #eval %s" (buffer-substring (point) (line-end-position)))
+     (cond
+      ;; Builtin commands
+      ((looking-at smart-mode-builtins-regex)
+       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
+       (goto-char (match-end 0)))
+      ;; User expressions: user->xxx +=
+      ((looking-at (concat "\\(user\\)[=-]>")); user=>  user->
+       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+       (goto-char (match-end 0)))
+      ;; Unknown commands
+      ((smart-mode-scan-expr 'smart-mode-warning-face)))
+     ;;(message "spec#2: #eval %s" (buffer-substring (point) (line-end-position)))
+     (if (looking-at "[ \t]+") (goto-char (match-end 0))
+       t)
+     (smart-mode-scan-list 'smart-mode-no-face)))); defun
 
 (defun smart-mode-scan-after-targets ()
   (setq smart-mode-scan-dialect nil)
