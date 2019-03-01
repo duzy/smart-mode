@@ -1351,11 +1351,10 @@
      ((looking-at "\\((\\)[ \t]*"); ... ( #...
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
       (setq step (goto-char (match-end 0)) spec-begin (match-end 1))
-      (cond
-       ((looking-at "#") (smart-mode-scan-comment))
-       ((looking-at "\n") (setq step (goto-char (match-end 0))
-                                end (line-end-position))))
-      t)
+      (if (looking-at "#") (smart-mode-scan-comment))
+      (if (looking-at "\n")
+          (setq step (goto-char (match-end 0))
+                end (line-end-position))))
      ((looking-at "[^(]") (setq single t)))
     ;; scanning specs of import/files/...
     (while (and (< step end) (< (point) end))
@@ -1365,9 +1364,14 @@
          t); Continues if no preceding spaces
        ;;(message "%s specs #1: %s" stmt (buffer-substring (point) end))
        (if (and (looking-at "[^#\n]"); not comment or end of line
-                (functionp spec) (funcall spec)); call spec scan func
+                (functionp spec)
+                (unless (funcall spec)
+                  ;; Warning unscanned chars before '#'
+                  (when (looking-at "[ \t]*\\([^#]+?\\)[ \t]*#")
+                    (setq step (goto-char (match-end 0))))
+                  nil)); call spec scan func
            (setq step (if (< step (point)) (point) end))
-         (setq step (goto-char end))); Continues if no spec scanned
+         t); Continues if no spec scanned
        (if (looking-at "[ \t]+"); spec tailing spaces
            (setq step (goto-char (match-end 0)))
          t); Continues if no tailing spaces
