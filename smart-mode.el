@@ -2202,54 +2202,31 @@
         (setq step (goto-char (match-end 0))))
        ((looking-back "^\t[ \t]*"); at the beginning
         (cond
-         ((looking-at (concat "\\(FROM\\)[ \t]+"
-                              ;; "\\([[:alpha:]_][[:alnum:]_]*\\)"
-                              ;; "\\(:\\)"
-                              ;; "\\([^# \t\n]*\\)"
-                              ))
+         ((looking-at "\\(FROM\\)[ \t]+")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
-          ;; (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-base-name-face)
-          ;; (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
-          ;; (put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-base-version-face)
           (setq step (goto-char (match-end 0)) context 'base-name))
-         ((looking-at (concat "\\(MAINTAINER\\)[ \t]+"
-                              ;; "\\([^#\n]*\\)"
-                              ))
+         ((looking-at "\\(MAINTAINER\\)[ \t]+")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
-          ;; (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-string-face)
           (setq step (goto-char (match-end 0)) context 'string))
-         ((looking-at (concat "\\(ENV\\)[ \t]+"
-                              ;; "\\([[:alpha:]_][[:alnum:]_]*\\)"
-                              ;; "\\(=\\)"
-                              ));\\([^ \t\n]*\\)
+         ((looking-at "\\(ENV\\)[ \t]+")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
-          ;; (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
-          ;; (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
-          ;; ;;(put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-env-value-face)
           (setq step (goto-char (match-end 0)) context 'env-name))
-         ((looking-at (concat "\\(USER\\)[ \t]+"
-                              ;; "\\([[:alpha:]_][[:alnum:]_]*\\)"
-                              ;; "\\(:\\)"
-                              ;; "\\([^# \t\n]*\\)"
-                              ))
+         ((looking-at "\\(USER\\)[ \t]+")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
-          ;; (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-dockerfile-string-face)
-          ;; (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-punc-face)
-          ;; (put-text-property (match-beginning 4) (match-end 4) 'font-lock-face 'smart-mode-dockerfile-string-face)
           (setq step (goto-char (match-end 0)) context 'user-name))
-         ((looking-at (concat "\\(RUN\\)[ \t]+"))
+         ((looking-at "\\(RUN\\)[ \t]+")
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
           (setq step (goto-char (match-end 0)) context 'cmd)
           (smart-mode-scan-recipe-bash (point) end))
          ((looking-at (concat smart-mode-dockerfile-keywords-regex "[ \t]+"))
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
-          (setq step (goto-char (match-end 0))))))
+          (setq step (goto-char (match-end 0)) context (make-symbol (match-string 1))))))
        ((looking-at ":")
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
         (setq step (goto-char (match-end 0)))
         (cond
          ((eq context 'base-name) (setq context 'base-version))
-         ((eq context 'user-name) (setq context 'user-passwd))))
+         ((eq context 'user-name) (setq context 'user-pass))))
        ((looking-at "=")
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
         (setq step (goto-char (match-end 0)))
@@ -2262,7 +2239,7 @@
          ((eq context 'env-name) (setq face 'smart-mode-dockerfile-env-name-face))
          ((eq context 'env-value) (setq face 'smart-mode-dockerfile-string-face))
          ((eq context 'user-name) (setq face 'smart-mode-dockerfile-string-face))
-         ((eq context 'user-value) (setq face 'smart-mode-dockerfile-string-face))
+         ((eq context 'user-pass) (setq face 'smart-mode-dockerfile-string-face))
          ((eq context 'string) (setq face 'smart-mode-dockerfile-string-face))
          ((setq face 'smart-mode-no-face)))
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
