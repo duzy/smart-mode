@@ -1344,66 +1344,68 @@
 (defun smart-mode-scan-statement-specs (stmt begin)
   "Scans statement specs line by line in `smart' editing mode."
   (let ((spec (intern-soft (format "smart-mode-scan-%s-spec" stmt)))
-        (spec-begin) (step) (end))
+        (spec-begin) (step (point)) (end (line-end-position)) (single))
+    (if (looking-at "\\(?:[ \t]\\|\\\\\n\\)+"); spaces and \\\n
+        (setq step (goto-char (match-end 0))))
     (cond
-     ((looking-at "[ \t]*\\((\\)[ \t]*\\(#.*?\\)?\n"); ... ( #...
+     ((looking-at "\\((\\)[ \t]*"); ... ( #...
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
+      (setq step (goto-char (match-end 0)) spec-begin (match-end 1))
       (cond
-       ((and (match-beginning 2) (match-end 2))
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-comment-face)
-        ;; spec starts after '(' and tailing comment (#)
-        (setq spec-begin (match-end 2)))
-       (t; spec starts after '(' (without tailing comment)
-        (setq spec-begin (match-end 1))))
-      (setq step (goto-char (match-end 0))
-            end (line-end-position))
-      ;; scanning specs of import/files/...
-      (while (and (< step end) (< (point) end))
-        (and
-         (if (looking-at "[ \t]+"); consumes spaces (preceding or inline)
-             (setq step (goto-char (match-end 0)))
-           t); Continues if no preceding spaces
-         ;;(message "%s specs #1: %s" stmt (buffer-substring (point) end))
-         (if (and (looking-at "[^#\n]"); not comments or empty lines
-                  (functionp spec) (funcall spec)); call spec scan func
-             (setq step (if (< step (point)) (point) (1+ step)))
-           t); Continues if no spec scanned
-         (if (looking-at "[ \t]+"); spec tailing spaces
-             (setq step (goto-char (match-end 0)))
-           t); Continues if no tailing spaces
-         (if (looking-at "#"); spec tailing comment
-             (if (smart-mode-scan-expr 'smart-mode-comment-face)
-                 t; Good and continue!
-               (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
-               (setq step end)
-               nil); Breaks scanning!
-           t); Continue if no tailing comment
-         ;;(message "%s specs #2: %s" stmt (buffer-substring (point) end))
-         ;; Looking for next spec (by newline)
-         (if (looking-at "\n+"); scanning specs line by line
-             (setq step (goto-char (match-end 0))
-                   end (line-end-position))
-           t); Continues after newline
-         ;;(message "%s specs #3: %s" stmt (buffer-substring (point) end))
-         (when (looking-at "[ \t]*\\()\\)"); Done by ')'
-           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
-           (put-text-property begin (match-end 1) 'smart-semantic stmt); Set stmt semantic first!
-           (put-text-property spec-begin (match-beginning 0) 'smart-semantic (make-symbol (concat stmt "-spec")))
-           (goto-char (match-end 0))
-           (setq step end); End scanning specs!
-           (cond
-            ((looking-at "[ \t]*#"); tailing comment
-             (smart-mode-scan-expr 'smart-mode-comment-face))
-            ((looking-at "\n"); end of line
-             (setq step (goto-char (match-end 0))))
-            (t; warning any other tailing
+       ((looking-at "#") (smart-mode-scan-comment))
+       ((looking-at "\n") (setq step (goto-char (match-end 0))
+                                end (line-end-position))))
+      t)
+     ((looking-at "[^(]") (setq single t)))
+    ;; scanning specs of import/files/...
+    (while (and (< step end) (< (point) end))
+      (and
+       (if (looking-at "[ \t]+"); consumes spaces (preceding or inline)
+           (setq step (goto-char (match-end 0)))
+         t); Continues if no preceding spaces
+       ;;(message "%s specs #1: %s" stmt (buffer-substring (point) end))
+       (if (and (looking-at "[^#\n]"); not comment or end of line
+                (functionp spec) (funcall spec)); call spec scan func
+           (setq step (if (< step (point)) (point) end))
+         (setq step (goto-char end))); Continues if no spec scanned
+       (if (looking-at "[ \t]+"); spec tailing spaces
+           (setq step (goto-char (match-end 0)))
+         t); Continues if no tailing spaces
+       (if (looking-at "#"); spec tailing comment
+           (if (smart-mode-scan-comment) ;(smart-mode-scan-expr 'smart-mode-comment-face)
+               t; Good and continue!
              (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
-             (setq step (goto-char end))))))); while>and
-      (if (looking-at "[^)]"); checks that it's done and ')' is consumed
-          t; Returns t on success!
-        (message "%s specs error: %s" stmt (buffer-substring (point) end))
-        (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
-        (setq step (goto-char end)))))))
+             (setq step end)
+             nil); Breaks scanning!
+         t); Continue if no tailing comment
+       ;; Looking for next spec (by newline) or done if single
+       (if (looking-at "\n+"); scanning specs line by line
+           (if (not single)
+               (setq step (goto-char (match-end 0))
+                     end (line-end-position))
+             (setq step (goto-char end))
+             nil); only continues if not single mode
+         (not single)); Continues after newline
+       ;;(message "%s specs #2: %s" stmt (buffer-substring (point) end))
+       (when (looking-at "[ \t]*\\()\\)"); Done by ')'
+         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
+         (put-text-property begin (match-end 1) 'smart-semantic stmt); Set stmt semantic first!
+         (put-text-property spec-begin (match-beginning 0) 'smart-semantic (make-symbol (concat stmt "-spec")))
+         (goto-char (match-end 0))
+         (setq step end); End scanning specs!
+         (cond
+          ((looking-at "[ \t]*#"); tailing comment
+           (smart-mode-scan-expr 'smart-mode-comment-face))
+          ((looking-at "\n"); end of line
+           (setq step (goto-char (match-end 0))))
+          (t; warning any other tailing
+           (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+           (setq step (goto-char end))))))); while>and
+    (if (looking-at "[^)]"); checks that it's done and ')' is consumed
+        t; Returns t on success!
+      (message "%s specs error: %s" stmt (buffer-substring (point) end))
+      (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+      (setq step (goto-char end))))); defun>let
 
 (defun smart-mode-scan-import-spec ()
   (when (looking-back "^[ \t]*"); at the beginning of line
