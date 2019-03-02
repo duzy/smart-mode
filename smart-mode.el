@@ -667,7 +667,7 @@
 
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar-local smart-mode-scan-properties
-  (list 'smart-semantic 'smart-dialect 'smart-indent 'syntax-table)
+  (list 'smart-semantic 'smart-dialect 'smart-indent 'smart-message 'syntax-table)
   "Text properties used for code regions/tokens.")
 
 (defvar-local smart-mode-scan-dialect nil
@@ -743,6 +743,10 @@
 
 ;;---- DEFUNS ------------------------------------------------------------
 
+(defun smart-mode-warning-region (beg end string &rest objects)
+  (put-text-property beg end 'font-lock-face 'smart-mode-warning-face)
+  (put-text-property beg end 'smart-message (apply 'format string objects)))
+
 (defun smart-mode-scan-region (beg end)
   "Identify syntactic tokens/symbols (strings/comments/keywords, etc.)."
   ;;(smart-mode-message "scan-region: beg(%d) end(%d)" beg end)
@@ -783,7 +787,7 @@
   (when (functionp (setq scan (intern-soft (format "smart-mode-scan-%s" name))))
     (funcall scan beg end)
     (when (< (point) end)
-      (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+      (smart-mode-warning-region (point) end "unscanned %s specific region" name)
       (goto-char end))
     t))
 
@@ -844,9 +848,8 @@
             (while (or (setq valid (looking-at (concat "\\s-*\\(" smart-mode-project-option-regex "\\)")))
                        (looking-at (concat "\\s-" smart-mode-flag-regex)))
               (if valid (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-face)
-                (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
-                (message "invalid project option: %s" (buffer-substring (match-beginning 1) (match-end 2))))
-              (goto-char (match-end 0))))
+                (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid project option: %s" (buffer-substring (match-beginning 1) (match-end 2)))
+              (goto-char (match-end 0)))))
           ;; project name: zzz
           (cond
            ;; looking at empty project name
@@ -859,8 +862,7 @@
             (goto-char (match-beginning 2)))
            ;; highlight invalid project name: zzz (
            ((looking-at "[ \t]*\\([^(\n]+?\\)[ \t]*\\([(\n]\\)")
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
-            (message "invalid project name: %s" (buffer-substring (match-beginning 1) (match-end 1)))
+            (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid project name: %s" (buffer-substring (match-beginning 1) (match-end 1)))
             (goto-char (match-beginning 2))))
           ;; project bases: (...)
           (when (looking-at "\\((.*?)\\)\\s-*\n")
@@ -878,7 +880,7 @@
             (goto-char (match-end 0)) ; skip statement keyword
             (smart-mode-scan-statement-options stmt)
             (unless (smart-mode-scan-statement-specs stmt begin)
-              (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
+              (smart-mode-warning-region (point) (line-end-position) "unscanned %s statement" stmt)
               (goto-char (line-end-position)))))
          ;;
          ;; assignment statements: foo := ...
@@ -901,25 +903,25 @@
             ;;(message "special rule: %s" (buffer-substring (point) (line-end-position)))
             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-special-rule-name-face)
             (goto-char (match-end 1))
-            (let ((step (point)) (end (line-end-position)))
-              (while (< step end) ; prevents dead-scanning loop
+            (let ((step (point)) (linend (line-end-position)))
+              (while (and (< step linend) (looking-at "[^:\n]"))
                 (cond
                  ((looking-at smart-mode-special-rule-user-options-regex)
                   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-face)
                   (setq step (goto-char (match-end 1))))
                  ((looking-at smart-mode-flag-regex)
-                  (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
-                  (setq (goto-char (match-end 0))))
-                 (t (setq step (1+ step))))))
+                  (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid user option %s" (match-string 0))
+                  (setq step (goto-char (match-end 0))))
+                 ((setq step (1+ step))))))
             (if (looking-at "[ \t]*\\(:\\)"); :
                 (progn
                   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
                   (goto-char (match-end 0)))
-              (put-text-property (match-beginning 1) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
+              (smart-mode-warning-region (match-beginning 1) (line-end-position) "invalid after :user:")
               (goto-char (line-end-position)))
-            (smart-mode-scan-after-targets))
+            (smart-mode-scan-after-targets end))
            (t ; unsupported special rules
-            (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
+            (smart-mode-warning-region (point) (line-end-position) "unknown special rule")
             (goto-char (line-end-position)))))
          ;;
          ;; general rules
@@ -942,11 +944,11 @@
             (put-text-property colon-begin colon-end 'font-lock-face 'smart-mode-rule-colon-face)
             (goto-char colon-end))
           ;;(message "general rule: %s" (buffer-substring (point) (line-end-position)))
-          (smart-mode-scan-after-targets))
+          (smart-mode-scan-after-targets end))
          ;;
          ;; Warning any line-preceding \t not of a rule
          ((and (looking-back "^") (looking-at "\t.*"))
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid line prefix")
           (goto-char (match-end 0)))
          ;;
          ;; Any blank lines
@@ -958,7 +960,7 @@
           (goto-char (match-beginning 1)) ; skip line-preceding spaces
           (unless (smart-mode-scan-expr)
             (when (looking-at "[ \t]*\\(.+\\)[ \t]*")
-              (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
+              (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid prefix expression")
               (goto-char (match-end 0)))))
          ;;
          ;; try comments first
@@ -1011,7 +1013,7 @@
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-escape-char-face)
         (goto-char (match-end 0)))
        ((looking-at "[ \t#]")
-        (put-text-property begin end 'font-lock-face 'smart-mode-warning-face)
+        (smart-mode-warning-region begin end "invalid escape expression")
         (goto-char (match-end 0))))))
    ;;
    ;; glob expresssions: *.c
@@ -1038,7 +1040,7 @@
     (goto-char (match-end 0))
     (if (looking-at "\\(?:[=-]>\\)+"); continual arrows: -> =>
         (progn
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid selection")
           (goto-char (match-end 0)))
       (smart-mode-scan-combine
        (or suggested-face 'smart-mode-call-var-name-face))))
@@ -1048,7 +1050,7 @@
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pcon-face)
     (goto-char (match-end 0))
     (when (looking-at "/+"); continual pseg: ////
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "too many path splitters")
       (goto-char (match-end 0)))
     (smart-mode-scan-expr 'smart-mode-pseg-face))
    ;;
@@ -1072,7 +1074,7 @@
    ((looking-at "=")
     (goto-char (match-end 0))
     (if (and (not (looking-at "[({]\\|")) (looking-at smart-mode-scan-combine-delim))
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid key-value")
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pair-sign-face)
       (smart-mode-scan-combine 'smart-mode-pair-value-face)))
    ;;
@@ -1135,8 +1137,7 @@
         (setq step (goto-char (match-end 0))
               end (line-end-position)))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
+        (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (list)")
         (setq step (goto-char (match-end 0))))
        ((smart-mode-scan-expr 'smart-mode-no-face); list item
         (setq step (if (< step (point)) (point) (1+ step))))
@@ -1246,7 +1247,7 @@
             (goto-char (match-end 0)))
            ;; ends with wrong calling symbols..
            ((looking-at "[$&][^ \t\n]?");
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+            (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid calling (char): %s" (match-string 0))
             (goto-char (match-end 0))
             nil))
         ;; if left paren/brack/colon is presented
@@ -1275,8 +1276,7 @@
                 (setq step (goto-char (match-end 0))
                       end (line-end-position)))
                ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-                (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
-                (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
+                (smart-mode-warning-region (match-beginning 2) (match-end 2) "invalid escape (call)")
                 (setq step (goto-char (match-end 0))))
                ((looking-at ",") ;  comma ',' starts a new argument
                 (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-comma-face)
@@ -1287,7 +1287,7 @@
                 (forward-char); skip forward
                 (setq step (point))))));>while>cond
            ((looking-at ",")
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+            (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid escape (argument)")
             (goto-char (match-end 0)))) ; when>cond
           (if (cond
                ((string= left "(") (looking-at ")"))
@@ -1296,10 +1296,10 @@
               (progn
                 (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-sign-face)
                 (goto-char (match-end 0)))
-            (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+            (smart-mode-warning-region (point) end "invalid call termination")
             (goto-char end)))))) ; >let>when>when>if
    (t
-    (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
+    (smart-mode-warning-region (point) (line-end-position) "not a call")
     (goto-char (line-end-position)))))
 
 (defun smart-mode-scan-group (&optional suggested-face)
@@ -1317,8 +1317,7 @@
           (setq step (goto-char (match-end 0))
                 end (line-end-position)))
          ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
-          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid escape (group)")
           (setq step (goto-char (match-end 0))))
          ((looking-at ")") ; done!
           (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
@@ -1333,12 +1332,10 @@
           (setq step (+ step)))))
       (if (looking-back ")") ; checking back the right paren ')'
           t; Returns true on success!
-        (message "group error#1: %s" (buffer-substring (point) end))
-        (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+        (smart-mode-warning-region (point) end "invalid group: %s" (buffer-substring (point) end))
         (goto-char end)))
      (t
-      (message "group error#0: %s" (buffer-substring (point) end))
-      (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+      (smart-mode-warning-region (point) end "not a group: %s" (buffer-substring (point) end))
       (goto-char end))))) ; defun>let>cond
 
 (defun smart-mode-scan-statement-options (stmt)
@@ -1357,8 +1354,7 @@
           (setq step (goto-char (match-end 0))
                 end (line-end-position)))
          ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
-          (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (statement options)")
           (setq step (goto-char (match-end 0))))
          ;; scan known options per statement
          ((and regex (looking-at (concat "\\s-*\\(" regex "\\)")))
@@ -1366,15 +1362,12 @@
           (setq step (goto-char (match-end 0))))
          ;; scan unknown options (warning)
          ((and (looking-back "\\s-") (looking-at smart-mode-flag-regex))
-          (message "invalid %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-face)
-          (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
           (setq step (goto-char (match-end 0))))
          ((looking-at "("); found ')', done!
           (setq step end))
          ((< (point) end); wrong option expressions
-          (message "%s options error: %s" stmt (buffer-substring (point) (line-end-position)))
-          (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+          (smart-mode-warning-region (point) end "%s options error: %s" stmt (buffer-substring (point) (line-end-position)))
           (setq step (goto-char end)))))))); defun
 
 (defun smart-mode-scan-statement-specs (stmt begin)
@@ -1414,7 +1407,7 @@
        (if (looking-at "#"); spec tailing comment
            (if (smart-mode-scan-comment) ;(smart-mode-scan-expr 'smart-mode-comment-face)
                t; Good and continue!
-             (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+             (smart-mode-warning-region (point) end "invalid comment")
              (setq step end)
              nil); Breaks scanning!
          t); Continue if no tailing comment
@@ -1439,12 +1432,11 @@
           ((looking-at "\n"); end of line
            (setq step (goto-char (match-end 0))))
           (t; warning any other tailing
-           (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+           (smart-mode-warning-region (point) end "unternimated statement specs")
            (setq step (goto-char end))))))); while>and
     (if (looking-at "[^)]"); checks that it's done and ')' is consumed
         t; Returns t on success!
-      (message "%s specs error: %s" stmt (buffer-substring (point) end))
-      (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+      (smart-mode-warning-region (point) end "%s specs error: %s" stmt (buffer-substring (point) end))
       (setq step (goto-char end))))); defun>let
 
 (defun smart-mode-scan-spec-import ()
@@ -1480,7 +1472,8 @@
     (and
      (if (smart-mode-scan-expr 'smart-mode-no-face)
          t; Good to continue!
-       (message "spec error#1: #configuration %s" (buffer-substring (point) (line-end-position)))
+       (smart-mode-warning-region (point) (line-end-position) "configuration spec error#1: %s" (buffer-substring (point) (line-end-position)))
+       (goto-char (line-end-position))
        nil); Nil on failure to stop!
      (let ((step (point)) (end (line-end-position)))
        (cond
@@ -1489,7 +1482,7 @@
          (goto-char (match-end 0))
          (smart-mode-scan-list 'smart-mode-no-face))
         (t
-         (put-text-property (match-beginning 1) end 'font-lock-face 'smart-mode-warning-face)
+         (smart-mode-warning-region (match-beginning 1) end "configuration spec error#2")
          (goto-char end))); cond
        t)))); defun
 
@@ -1506,7 +1499,7 @@
        (goto-char (match-end 0)))
       ;; User expressions: user->xxx +=
       ((looking-at (concat "\\(user\\)[=-]>")); user=>  user->
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid eval spec: %s" (match-string 0))
        (goto-char (match-end 0)))
       ;; Unknown commands
       ((smart-mode-scan-expr 'smart-mode-warning-face)))
@@ -1515,21 +1508,24 @@
        t)
      (smart-mode-scan-list 'smart-mode-no-face)))); defun
 
-(defun smart-mode-scan-after-targets ()
+(defun smart-mode-scan-after-targets (end)
   (setq smart-mode-scan-dialect nil)
   (when (looking-at "[ \t]*\\(\\[\\)")
     (goto-char (match-beginning 1))
     (smart-mode-scan-modifiers)
-    ;;(message "general rule: modifiers: %s" (buffer-substring (point) end))
+    ;;(message "scan-after-targets: modifiers: %s" (buffer-substring (point) end))
+    ;;(message "scan-after-targets: modifiers: %s" (buffer-substring (point) (line-end-position)))
     ;; the second optional colon : after ]
     (when (looking-at "[ \t]*\\(:\\)"); :
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
       (goto-char (match-end 0))))
   (unless (looking-at "[ \t]*\\(?:#.*?\\)\n")
+    ;;(message "scan-after-targets: dependencies: %s" (buffer-substring (point) (line-end-position)))
     (if (looking-at "[ \t]*") (goto-char (match-end 0)))
-    (smart-mode-scan-dependencies))
-  (when (looking-at "\t")
-    (smart-mode-scan-recipes))
+    (smart-mode-scan-dependencies end))
+  (when (looking-at "[;\t]")
+    ;;(message "scan-after-targets: recipes: %s" (buffer-substring (point) (line-end-position)))
+    (smart-mode-scan-recipes end))
   t)
 
 (defun smart-mode-scan-modifiers ()
@@ -1568,11 +1564,11 @@
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
         (goto-char (match-end 0)))
        (t
-        (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+        (smart-mode-warning-region (point) end "unterminated modifiers")
         (goto-char end))) ;; cond
       t)) ;; > let
    (t
-    (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
+    (smart-mode-warning-region (point) (line-end-position) "not modifiers")
     (goto-char (line-end-position)))))
 
 (defun smart-mode-scan-parameters ()
@@ -1665,95 +1661,102 @@
     (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
     (goto-char (line-end-position)))))
 
-(defun smart-mode-scan-dependencies ()
+(defun smart-mode-scan-dependencies (end)
   (cond
-   ((looking-at "[ \t]*[^\n]")
-    (let ((begin (match-beginning 0)) (step (point)) (end (line-end-position)))
-      (while (and (< step end) (< (point) end)
-                  (looking-at "[^\n]"))
-        ;;(message "dependencies: %s" (buffer-substring (point) end))
+   ((looking-at "[ \t]*[^;#\n]"); ended by ';' and '\n'
+    (let ((begin (match-beginning 0)) (step (point)) (pos))
+      (while (and (< step end) (< (point) end) (looking-at "[^;#\n]"))
+        ;;(message "scan-dependencies: %s" (buffer-substring (point) (line-end-position)))
         (cond
          ((looking-at "[ \t]+") (setq step (goto-char (match-end 0)))) ; spaces
          ((looking-at "\\(\\\\\\)\n") ; continual lines
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
-          (setq step (goto-char (match-end 0))
-                end (line-end-position)))
+          (setq step (goto-char (match-end 0)))
+          (if (< end (setq pos (line-end-position)))
+              (setq end pos)))
          ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
           (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-warning-face)
           (setq step (goto-char (match-end 0))))
          ((smart-mode-scan-expr 'smart-mode-dependency-face)
           (setq step (if (< step (point)) (point) (1+ step))))
-         (t (setq step end)))) ;; while>cond
-      ;;(message "dependencies: %s" (buffer-substring (point) end))
+         ((setq step end)))) ;; while>cond
+      ;;(message "scan-dependencies: %s" (buffer-substring (point) (line-end-position)))
       (cond
        ((looking-at "[ \t]*\n")
         (put-text-property begin (match-end 0) 'smart-semantic 'dependencies)
         (goto-char (match-end 0)))
-       (t
+       ((setq end (line-end-position))
         (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
         (goto-char end))))) ; >let>while>cond
+   ((looking-at "[ \t]*\\([;#]\\)"); the ';' recipe
+    (put-text-property (match-beginning 0) (match-beginning 1) 'smart-semantic 'dependencies)
+    (goto-char (match-beginning 1)))
    ((looking-at "[ \t]*\n")
     (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'dependencies)
     (goto-char (match-end 0)))
-   (t
-    (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
-    (goto-char (line-end-position))))) ; defun>cond
+   ((setq end (line-end-position))
+    (message "scan-dependencies error: %s" (buffer-substring (point) end))
+    (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
+    (goto-char end)))) ; defun>cond
 
-(defun smart-mode-scan-recipes ()
-  (cond
-   ((and (looking-back "^") (looking-at "\\(\t\\)"))
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
-    (let ((step (goto-char (match-end 1))) (end (line-end-position)))
+(defun smart-mode-select-dialect-scanner ()
+  (unless smart-mode-scan-dialect
+    (setq smart-mode-scan-dialect "none"))
+  (let* ((name "smart-mode-scan-recipe-%s")
+         (scanner (intern-soft (format name smart-mode-scan-dialect))))
+    (if (not (or scanner (string= smart-mode-scan-dialect "none")))
+        (setq scanner (intern-soft (format name "text"))
+              smart-mode-scan-dialect "text"))
+    scanner))
+
+(defun smart-mode-scan-recipes (end)
+  (let* ((scanner (smart-mode-select-dialect-scanner))
+         (begin (point)) (step begin) (semi) (pos))
+    (when (or (setq semi (looking-at ";")); semicolon recipe
+              (and (looking-back "^") (looking-at "\t")))
+      ;;(message "scan-recipes: #0 #dialect(%s) %s" smart-mode-scan-dialect (buffer-substring (point) (line-end-position)))
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (setq begin (match-beginning 0)  step (goto-char (match-end 0)))
       (while (and (< step end) (< (point) end))
         ;;(message "scan-recipes: #1 #dialect(%s) %s" smart-mode-scan-dialect (buffer-substring (point) end))
         (and
-         (if (smart-mode-scan-recipe)
-             (setq step (if (< step (point)) (point) (1+ step)))
-           ;; consume the current line (to \n) 
-           (while (and (< (point) end) (looking-at "[^\n]"))
-             (setq step (goto-char (match-end 0))))
-           t)
-         (if (looking-at "\n")
+         (or (smart-mode-scan-recipe scanner semi end)
+             t); continue
+         (if (looking-at "\n"); end of recipe line
              (setq step (goto-char (match-end 0)))
-           (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
-           (setq step (goto-char end))); if
-         (when (looking-at "\t"); continue next recipe if any
-           (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+           ;; scan the current rest line (to \n)
+           (setq pos (point)); the failure point
+           (if (looking-at "[^\n]+\n") (goto-char (match-end 0)))
+           (smart-mode-warning-region pos (point) "unscanned %s recipe: %s" smart-mode-scan-dialect (buffer-substring pos (point)))
+           (setq step (point))); continue
+         (cond; continue with next recipe if any
+          ((and (not semi) (looking-back "^") (looking-at "\t"))
            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-           (setq step (goto-char (match-end 0)) end (line-end-position))
-           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0))))))) ;; while>and
+           (setq begin (match-beginning 0) step (goto-char (match-end 0)))
+           (when (<= end (setq pos (line-end-position)))
+             (save-excursion
+               (setq end (goto-char pos))
+               (if (looking-at "\n\t") (setq end (match-end 0))))))
+          ((setq step end))))); while>and
       ;;(message "scan-recipes: #2 #dialect(%s) %s" smart-mode-scan-dialect (buffer-substring (point) end))
-      (cond
-       ((and (looking-back "^") (looking-at "[^\t]"))
-        ;;(put-text-property begin (point) 'smart-semantic 'recipes)
-        t)
-       (t; warning errors
-        (put-text-property (point) end 'font-lock-face 'smart-mode-warning-face)
-        (goto-char end))))) ; >let>unless
-   (t
-    (put-text-property (point) (line-end-position) 'font-lock-face 'smart-mode-warning-face)
-    (goto-char (line-end-position))))) ; defun>cond
+      (setq end (and (looking-back "^") (or semi (looking-at "[^\t]\\|$")))));when
+    (unless end
+      (setq end (line-end-position))
+      (smart-mode-warning-region (point) end "unterminated %s recipes: %s" smart-mode-scan-dialect (buffer-substring (point) end))
+      (goto-char end)))); defun>let>unless
 
-(defun smart-mode-scan-recipe (&optional beg end)
-  ;;(message "scan-recipe: #dialect(%s) %s" smart-mode-scan-dialect (buffer-substring (point) (line-end-position)))
-  (let ((step (point)) (dialect))
-    (unless beg (setq beg step))
-    (unless end (setq end (line-end-position)))
-    (when (looking-back "^\t"); [ \t]*
-      (setq dialect (or smart-mode-scan-dialect "none"))
-      (setq func (intern-soft (format "smart-mode-scan-recipe-%s" dialect)))
-      (if (and smart-mode-scan-dialect (not func))
-          (setq func (intern-soft "smart-mode-scan-recipe-text")
-                dialect "text"))
-      ;;(message "scan-recipe: #%s %s" dialect (buffer-substring (point) (line-end-position)))
-      (and func (functionp func) (funcall func beg end))
-      (unless (looking-at "\n"); ???
-        (goto-char (line-end-position)))
-      (setq end (1+ (point))); 1+ to include the \n
-      (put-text-property beg end 'smart-semantic 'recipe)
-      (put-text-property beg end 'smart-dialect (make-symbol dialect))))); defun
+(defun smart-mode-scan-recipe (scan semi end)
+  ;;(message "scan-recipe: #dialect(%s) #semi(%s) %s" smart-mode-scan-dialect semi (buffer-substring (point) (line-end-position)))
+  (let* ((begin (point)) (step begin) (dialect smart-mode-scan-dialect))
+    (when (cond (semi (looking-back "[^\n];"))
+                ((looking-back "^\t")))
+      ;;(message "scan-recipe: #1 #%s %s" dialect (buffer-substring (point) (line-end-position)))
+      (and scan (functionp scan) (funcall scan begin end))
+      ;;(message "scan-recipe: #2 #%s %s" dialect (buffer-substring (point) (line-end-position)))
+      (setq end (1+ (line-end-position))); 1+ to include the \n
+      (put-text-property begin end 'smart-semantic 'recipe)
+      (put-text-property begin end 'smart-dialect (make-symbol dialect))))); defun
 
 (defun smart-mode-scan-recipe-none (beg end)
   (let ((step beg))
@@ -1786,6 +1789,7 @@
               end (line-end-position))
         (when (looking-at "\t"); \t after continual escaping \
           (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+          (put-text-property (match-beginning 0) (match-end 0) 'smart-dialect 'none)
           (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
@@ -1843,7 +1847,7 @@
     (while (and (< (point) end) (< step end) (looking-at "[^\n]"))
       (cond
        ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
-        (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+        ;;(put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
        ((and (looking-back "^\t") (looking-at "#"))
@@ -2069,14 +2073,14 @@
 (defun smart-mode-scan-recipe-shell (beg end) (smart-mode-scan-recipe-bash beg end))
 (defun smart-mode-scan-recipe-bash (beg end)
   (let ((step beg) (headword) (face) (pos))
-    ;;(message "scan-recipe: #bash %s" (buffer-substring beg end))
+    ;;(message "scan-recipe: #bash %s" (buffer-substring beg (line-end-position)))
     (while (and (< (point) end) (< step end) (looking-at "[^\n]"))
       (cond
        ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
         (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
-       ((and (looking-back "^\t") (looking-at "@")); the @ prefix
+       ((and (looking-back "^\t\\|;[ \t]*") (looking-at "@")); the @ prefix
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\n"); continual lines
@@ -2300,10 +2304,11 @@ Returns `t' if there's a next dependency line, or nil."
     (save-excursion
       (while (and (< (point) (point-max)) (not pos))
         (beginning-of-line 2) ;; next (N-1) lines
-        (setq begin (point))
-        ;;(message "next: #semantic(%s) %s" (get-text-property (point) 'smart-semantic) (buffer-substring (point) (line-end-position)))
+        (setq semantic (get-text-property (point) 'smart-semantic)
+              begin (point))
+        ;;(message "next: #%s %s" semantic (buffer-substring (point) (line-end-position)))
         (cond
-         ((and (setq semantic (get-text-property (point) 'smart-semantic))
+         ((and semantic
                ;;(message "next#0: #semantic(%s) %s" semantic (buffer-substring (point) (line-end-position)))
                (or (equal semantic 'rule-targets)
                    (equal semantic 'rule-colon)
@@ -3064,8 +3069,10 @@ Returns `t' if there's a next dependency line, or nil."
   (unless pos (setq pos (point)))
   (let ((semantic (get-text-property pos 'smart-semantic))
         (dialect (get-text-property pos 'smart-dialect))
-        (indent (get-text-property pos 'smart-indent)))
+        (indent (get-text-property pos 'smart-indent))
+        (msg (get-text-property pos 'smart-message)))
     (cond
+     ((and msg) (message "%s" msg))
      ((and semantic dialect) (message "%s: #%s" semantic dialect))
      ((and semantic) (message "%s: #none" semantic)))))
 
