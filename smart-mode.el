@@ -947,8 +947,9 @@
           (smart-mode-scan-after-targets end))
          ;;
          ;; Warning any line-preceding \t not of a rule
-         ((and (looking-back "^") (looking-at "\t.*"))
-          (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid line prefix")
+         ((and (not (string= semantic 'recipe))
+               (looking-back "^") (looking-at "\t.*"))
+          (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid line prefix (%s)" semantic)
           (goto-char (match-end 0)))
          ;;
          ;; Any blank lines
@@ -3072,9 +3073,11 @@ Returns `t' if there's a next dependency line, or nil."
         (indent (get-text-property pos 'smart-indent))
         (msg (get-text-property pos 'smart-message)))
     (cond
-     ((and msg) (message "%s" msg))
+     ((and msg semantic dialect) (message "%s %s: %s" semantic dialect msg))
+     ((and msg semantic) (message "%s: %s" semantic msg))
      ((and semantic dialect) (message "%s: #%s" semantic dialect))
-     ((and semantic) (message "%s: #none" semantic)))))
+     ((and semantic) (message "%s" semantic))
+     ((and dialect) (message "#%s" dialect)))))
 
 (defun smart-mode-message-properties (&optional pos)
   "Show text properties at point."
