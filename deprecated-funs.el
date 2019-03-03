@@ -1246,3 +1246,55 @@ matched in a rule action."
        ((< (point) end); anything else
         (forward-char); just move one step forward
         (setq step (point)))))))
+
+(defun smart-mode-invalidate-region (beg end)
+  (let ((semantic (get-text-property beg 'smart-semantic))
+        (dialect (get-text-property beg 'smart-dialect))
+        (funame) (func) (range))
+    (if (equal semantic 'recipe)
+        ;; (progn
+        ;;   (if (or (null dialect) (string-equal dialect "") (string-equal dialect "none"))
+        ;;       (setq dialect "internal"))
+        ;;   (setq func (intern-soft (format "smart-mode-invalidate-%s-recipe-range" dialect)))
+        ;;   (if (and func (functionp func))
+        ;;       (setq range (funcall func beg end))))
+        (setq range (smart-mode-invalidate-recipe-range beg end))
+      (setq range (smart-mode-invalidate-default-range beg end)))
+    (if range (setq beg (car range) end (cdr range)))
+    ;;(smart-mode-message "invalidate-region: beg(%S) end(%S)" beg end)
+    (if (< beg end) (smart-mode-scan-region beg end))))
+
+(defun smart-mode-invalidate-default-range (beg end)
+  (save-excursion
+    (goto-char beg) ;; the beginning of range
+    (smart-mode-beginning-of-line)
+    (let ((semantic (get-text-property (point) 'smart-semantic)))
+      ;;(smart-mode-message "invalidate-default: semantic(%s)" semantic)
+      (cond
+       ;;((looking-at "^") (backward-char))
+       ((and (equal semantic 'recipe) (looking-at "^\t"))
+        (forward-char))
+       ((looking-at "[ \t]*\\()\\)")
+        (smart-mode-goto-open "(" ")" (point-min) (match-beginning 1))))
+      (setq beg (point))
+
+      (goto-char end) ;; the end of range
+      (cond 
+       ((looking-at "^") (backward-char))
+       ((looking-at "\\()\\)[ \t]*$") nil)
+       (t (smart-mode-end-of-continual-lines)))
+      (setq end (point))
+      ;;(smart-mode-message "invalidate-default: semantic(%S) (%s)" semantic (buffer-substring beg end))
+      ))
+  (cons beg end))
+
+(defun smart-mode-invalidate-recipe-range (beg end)
+  (save-excursion
+    (goto-char beg) ;; the beginning of recipe
+    (smart-mode-beginning-of-line)
+    (setq beg (1+ (point)))
+    (goto-char end) ;; the end of recipe
+    (if (looking-at "^") (backward-char)
+      (smart-mode-end-of-continual-lines))
+    (setq end (point)))
+  (cons beg end))
