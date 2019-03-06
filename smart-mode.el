@@ -2670,7 +2670,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        ;; escaped characters \" \$ etc
        ((looking-at (concat "\\(?:\\\\.\\|[^" (regexp-quote quote) "$&]\\)+"))
         (setq step (goto-char (match-end 0))))
-       ((looking-at "\\(\\$\\)\\(\\$\\)")
+       ((and (string= quote "\"") (looking-at "\\(\\$\\)\\(\\$\\)"))
         (if (< lastpoint (match-beginning 0))
             (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
