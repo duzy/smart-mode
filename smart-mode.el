@@ -102,7 +102,7 @@
   "Regex matching assignment signs")
 
 (defconst smart-mode-comment-todos
-  `("TODO" "FIXME") ; case insentive
+  `("TODO" "FIXME" "WARNING" "NOTE") ; case insentive
   "List of supported todos in comments.")
 (defconst smart-mode-comment-todos-regex ; \<\(FIXME\|TODO\)\>
   (regexp-opt smart-mode-comment-todos 'words)
@@ -2621,7 +2621,8 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step (goto-char (match-end 0))))
      ((looking-at "&&"); scan the &&
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
-      (setq step (goto-char (match-end 0))))
+      (setq step (goto-char (match-end 0))
+            face 'smart-mode-bash-command-name-face))
      ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
       (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-var-sign-face)
@@ -2708,54 +2709,81 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     t))
 
 (defun smart-mode-scan-recipe-python (end)
-  (smart-mode-scan* recipe-python () (looking-at "[^\n]")
+  (smart-mode-scan* recipe-python
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
     nil))
 
 (defun smart-mode-scan-recipe-perl (end)
-  (smart-mode-scan* recipe-perl () (looking-at "[^\n]")
+  (smart-mode-scan* recipe-perl
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
     nil))
 
 (defun smart-mode-scan-recipe-lua (end)
-  (smart-mode-scan* recipe-lua () (looking-at "[^\n]")
+  (smart-mode-scan* recipe-lua
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
     nil))
 
 (defun smart-mode-scan-recipe-dockerfile (end)
   (smart-mode-scan** recipe-dockerfile
-      ((pos) (context) (face)) (looking-at "[^\n]")
-    ;;(smart-mode-scan-trace "recipe: #dockerfile %s" (buffer-substring step end))
+      ((pos) (context) (face))
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
+    ;;(smart-mode-scan-trace-o (concat tag "#1") context end t)
     (cond
+     ((looking-at "^\\(\t\\)[ \t]*"); the beginning tap
+      ;;(smart-mode-scan-trace-o (concat tag "#2.0") context end t)
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)\\([[:alpha:]_][[:alnum:]_]*\\)"); escaping variables: \$foobar $$foobar
+      ;;(smart-mode-scan-trace-o (concat tag "#2.1") context end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-punc-face)
       (put-text-property (match-beginning 2) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\$\\$\\|&&"); $$ &&
+      ;;(smart-mode-scan-trace-o (concat tag "#2.2") context end t)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[$&]"); $ &
+      ;;(smart-mode-scan-trace-o (concat tag "#2.3") context end t)
       (setq pos (match-end 0)); save the end point
       (if (smart-mode-scan-expr end 'smart-mode-no-face)
           (setq step (if (< step (point)) (point) (1+ step)))
         (setq step (goto-char pos))))
-     ((looking-at "#[^\n]*")
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
-      (setq step (goto-char (match-end 0))))
+     ((looking-at "#")
+      ;;(smart-mode-scan-trace-o (concat tag "#2.4") context end t)
+      (smart-mode-scan-comment end)
+      (setq step (point) context nil))
      ((and (looking-back "^\t[ \t]*"); at the beginning
            (looking-at (concat smart-mode-dockerfile-keywords-regex "[ \t]+")))
+      ;;(smart-mode-scan-trace-o (concat tag "#2.5") context end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
       (setq step (goto-char (match-end 0)) context (match-string 1))
       (if (string= (match-string 1) 'RUN)
-          (smart-mode-scan-recipe-bash (point) end)))
+          (smart-mode-scan-recipe-bash end)))
      ((looking-at ":")
+      ;;(smart-mode-scan-trace-o (concat tag "#2.6") context end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
       (setq step (goto-char (match-end 0)))
       (cond
        ((string= context 'FROM) (setq context 'FROM-version))
        ((string= context 'USER) (setq context 'USER-pass))))
      ((looking-at "=")
+      ;;(smart-mode-scan-trace-o (concat tag "#2.7") context end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
       (setq step (goto-char (match-end 0)))
       (cond
        ((string= context 'ENV) (setq context 'ENV-value))))
      ((looking-at "[^$&:=#\\\n]+"); any in-line characters
+      ;;(smart-mode-scan-trace-o (concat tag "#2.8") context end t)
       (cond
        ((string= context 'FROM) (setq face 'smart-mode-dockerfile-base-name-face))
        ((string= context 'FROM-version) (setq face 'smart-mode-dockerfile-base-version-face))
@@ -2767,13 +2795,9 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        ((setq face 'smart-mode-no-face)))
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0))))
-     ((setq step (goto-char (1+ (point)))))); while>cond
-    ;; (when (looking-at "\n\\(\t\\)")
-    ;;   (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
-    ;;   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
-    ;;   (setq step (goto-char (match-end 0)) end (line-end-position))
-    ;;   (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
-    t)); defun>let
+     ((looking-at "[^\n]+")
+      ;;(smart-mode-scan-trace-o (concat tag "#2.9") context end t)
+      (setq step (goto-char (match-end 0))))))); defun>let
 
 (defun smart-mode-forward-char ()
   "Move point forward one character in smart editing mode."
