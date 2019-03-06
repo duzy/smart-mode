@@ -1675,19 +1675,20 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (setq step (goto-char (match-end 0)))
     (while (and (< step end) (< (point) end) (not result))
       (cond
-       ((looking-at "\\(?:\\\\.\\|[^\"$&]\\)+"); escapes \" \$ etc
+       ;; escaped characters \" \$ etc
+       ((looking-at (concat "\\(?:\\\\.\\|[^\"$&]\\)+"))
         (setq step (goto-char (match-end 0))))
        ((looking-at "[$&]")
         (if (< lastpoint (match-beginning 0))
             (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-string-face))
         (setq pos (match-end 0))
-        (smart-mode-scan-call end)
+        (smart-mode-scan-call end suggested-face)
         (setq step (if (< pos (point)) (point) (goto-char pos))
               lastpoint (point)))
-       ((looking-at "\""); the paired "
+       ((looking-at "\""); the paired quote (ending)
         (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
         (goto-char (match-end 0))
-        (setq step end result t))))
+        (setq step end result t)))); while
     (when (< lastpoint (point))
       (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-string-face)))); defun
 
@@ -2623,26 +2624,17 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))
             face 'smart-mode-bash-command-name-face))
-     ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-var-sign-face)
-      (setq step (goto-char (match-end 0)))
-      (cond
-       ((looking-at "\\w+"); variable name: $foobar
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
-        (setq step (goto-char (match-end 0))))
-       ((looking-at "{"); parameter substitution: ${...}
-        (smart-mode-scan-bash-substitution)
-        (setq step (point)))
-       ((looking-at ".")
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
-        (setq step (goto-char (match-end 0))))))
-     ((looking-at "/[^/ \t\n]*")
+     ((looking-at "\\(\\\\\\|\\$\\)[$]"); bash variables: \$foobar $$foobar
+      (put-text-property (match-beginning 1) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+      (setq step (goto-char (match-end 1)))
+      (smart-mode-scan-bash-varef end)
+      (setq step (point)))
+     ((looking-at "/[^/$ \t\n]*")
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0))))
-     ((looking-at "'\\(?:\\\\.\\|[^'\n]\\)*'")
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-string-face)
-      (setq step (goto-char (match-end 0))))
+     ((looking-at "['\"]")
+      (smart-mode-scan-bash-string (match-string 0) end)
+      (setq step (point)))
      ((looking-at "#")
       (smart-mode-scan-comment end)
       (setq step (point)))
@@ -2669,13 +2661,65 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step (goto-char (match-end 0))))
      ((setq step (goto-char (1+ (point))))))))
 
-(defun smart-mode-scan-bash-substitution ()
+(defun smart-mode-scan-bash-string (quote end)
+  (smart-mode-scan* bash-string ((lastpoint step) (pos)) (looking-at quote)
+    (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "("))
+    (setq step (goto-char (match-end 0)))
+    (while (and (< step end) (< (point) end) (not result))
+      (cond
+       ;; escaped characters \" \$ etc
+       ((looking-at (concat "\\(?:\\\\.\\|[^" (regexp-quote quote) "$&]\\)+"))
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "\\(\\$\\)\\(\\$\\)")
+        (if (< lastpoint (match-beginning 0))
+            (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-string-face)
+        (setq step (goto-char (match-end 1)))
+        (smart-mode-scan-bash-varef end)
+        (setq step (point) lastpoint step))
+       ((looking-at "[&][&]")
+        (setq step (goto-char (match-end 0))))
+       ((looking-at "[$&]")
+        (if (< lastpoint (match-beginning 0))
+            (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
+        (setq pos (match-end 0))
+        (smart-mode-scan-call end 'smart-mode-no-face)
+        (setq step (if (< pos (point)) (point) (goto-char pos))
+              lastpoint (point)))
+       ((looking-at quote); the paired quote (ending)
+        (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
+        (goto-char (match-end 0))
+        (setq step end result t)))); while
+    (when (< lastpoint (point))
+      (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-bash-string-face)))); defun
+
+(defun smart-mode-scan-bash-varef (end); variable references:  \$foobar $$foobar
+  (smart-mode-scan* bash-varef
+      ((lastpoint step) (pos))
+      (looking-at "[$]");"\\(\\\\\\|\\$\\)\\([$]\\)"
+    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-sign-face)
+    (setq step (goto-char (match-end 0)))
+    (cond
+     ((looking-at "\\w+"); variable name: $foobar
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
+      (setq step (goto-char (match-end 0))
+            result t))
+     ((looking-at "{"); parameter substitution: ${...}
+      (setq result (smart-mode-scan-bash-substitution end)
+            step (point)))
+     ((looking-at ".")
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+      (setq step (goto-char (match-end 0))
+            result t))))); defun
+
+(defun smart-mode-scan-bash-substitution (end)
   "See http://tldp.org/LDP/abs/html/parameter-substitution.html"
   (when (looking-at "{")
     ;;(message "substitution: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
     (setq step (goto-char (match-end 0)))
-    (let ((step (point)) (end (line-end-position)))
+    (let ((step (point)))
       (while (and (< step end) (< (point) end))
         ;;(message "substitution: (%s %s) %s" step end (buffer-substring step (line-end-position)))
         (cond
