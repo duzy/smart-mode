@@ -27,7 +27,7 @@
 ;;---- CONSTS ------------------------------------------------------------
 
 (defconst smart-mode-message-on nil)
-(defconst smart-mode-scan-trace-on t)
+(defconst smart-mode-scan-trace-on nil)
 
 (defconst smart-mode-syntax-propertize-function
   (syntax-propertize-rules
@@ -584,6 +584,10 @@
 (defface smart-mode-bash-keyword-face
   '((t :inherit font-lock-keyword-face))
   "Face to used to highlight keywords in Bash dialect."
+  :group 'smart)
+(defface smart-mode-bash-string-face
+  '((t :inherit font-lock-string-face))
+  "Face to used to highlight strings in Bash dialect."
   :group 'smart)
 
 (defface smart-mode-c++-punc-face
@@ -1276,9 +1280,9 @@
     (setq step (goto-char (match-end 0))
           sema-begin (match-beginning 0))
     (and
-     ;;(smart-mode-scan-trace-i (concat tag "#1") end)
+     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
      (smart-mode-scan-modifier-list end)
-     ;;(smart-mode-scan-trace-i (concat tag "#2") end)
+     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
      (when (looking-at "\\]")
        (goto-char (match-end 0))
        ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
@@ -1317,15 +1321,15 @@
     (setq step (goto-char (match-end 0)); skip '(('
           begin (match-beginning 0))
     (and
-     (smart-mode-scan-trace-i "parameters#1" end)
+     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
      (smart-mode-scan-parameter-list end)
-     (smart-mode-scan-trace-i "parameters#2" end)
+     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
      (cond
       ((looking-at "[ \t]*\\())\\)")
        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
        (put-text-property begin (match-end 1) 'smart-semantic 'parameters)
-       (setq step (goto-char (match-end 0))
-             result t))
+       (goto-char (match-end 0))
+       (setq step end result t))
       ((setq pos (point)   step (goto-char (line-end-position)))
        (smart-mode-warning-region pos (point) "expecting '))' (parameters)")
        nil)))))
@@ -1335,20 +1339,28 @@
     (if (looking-at "[ \t]+"); spaces
         (setq step (goto-char (match-end 0))))
     (cond
-     ((looking-at "))") (setq step end result t))
+     ((looking-at "))")
+      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+      (setq step end result t))
      ((looking-at "\\(\\\\\\)\n") ; continual lines
+      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
+      ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (parameters): %s" (match-string 2))
       (setq step (goto-char (match-end 0))))
      ((looking-at "[@]") ; special names for parameters
+      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-parameter-face)
       (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end 'smart-mode-parameter-face)
-      (when (looking-at "[ \t]*\\())\\)")
-        (goto-char (match-beginning 1))
-        (setq step end result t))))))
+      ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
+      (if (looking-at "[ \t]*\\())\\)")
+          (progn
+            (goto-char (match-beginning 1))
+            (setq step end result t))
+        (setq step (point)))))))
 
 (defun smart-mode-scan-modifier (end)
   (smart-mode-scan* modifier
@@ -2101,7 +2113,8 @@ delim. Escape characters and continual lines are processed. Using `recipe'
 (defun smart-mode-scan-recipes (semi end)
   (smart-mode-scan* recipes
       ((scanner (smart-mode-select-dialect-scanner)) (pos))
-      (or semi (and (looking-back "^") (looking-at "\t")))
+      (or (and semi (looking-at ";[ \t]*"))
+          (and (looking-back "^") (looking-at "\t")))
     (and
      (cond
       ;; single (semi) recipe only 
@@ -2115,7 +2128,8 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       ((smart-mode-scan-recipe-list scanner end)
        (setq step end result t))
       ;; FAILURE!
-      ((setq step end)))
+      ((setq step end)
+       (smart-mode-scan-trace-o (concat tag "#1") smart-mode-scan-dialect end t)))
      (when (looking-at "\n")
        (when (looking-at "\t\\([^\n]+\\)\n")
          (smart-mode-warning-region (match-beginning 1) (match-end 1) "unscanned %s recipe: %s"
@@ -2125,58 +2139,62 @@ delim. Escape characters and continual lines are processed. Using `recipe'
 (defun smart-mode-scan-recipe-list (scanner end)
   (smart-mode-scan** recipe-list
       ((begin step) (pos))
-      (and (looking-back "^")
-           (looking-at "\t"))
+      (and (looking-back "^") (looking-at "\t"))
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-    (and
-     ;;(smart-mode-scan-trace-i (concat tag "#1") end)
-     (smart-mode-scan-recipe end scanner nil)
-     ;;(smart-mode-scan-trace-i (concat tag "#2") end)
-     (cond
-      ((looking-at "[^\n]+"); unscanned recipe text
-       (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s"
-                                  smart-mode-scan-dialect (match-string 0))
-       (setq step (goto-char (match-end 0))))
-      (t)); continue
-     ;;
-     ;; looking for ending of the recipe (continue or done)
-     (cond
-      ;; continue with next recipe
-      ((looking-at "\\(\n\\)\t"); \n\t
-       ;;(smart-mode-scan-trace-i (concat tag "#3") end)
-       (setq step (goto-char (match-end 1))))
-      ;; finished the recipe list ($ matches the end of file)
-      ((looking-at "\\(\n\\)\\(?:[^\t]\\|$\\)"); \n
-       ;;(smart-mode-scan-trace-i (concat tag "#4") end)
-       (setq step end result t))
-      (t
-       ;;(smart-mode-scan-trace-i (concat tag "#5") end)
-       ))))); defun
+    (while (looking-at "^\t"); keep scanning for recipes
+      ;;(smart-mode-scan-trace-o (concat tag "#1") smart-mode-scan-dialect end t)
+      (if (smart-mode-scan-recipe end scanner nil)
+          (setq step (point))
+        (smart-mode-scan-trace-o (concat tag "#1.1") smart-mode-scan-dialect end t))
+      ;; (cond
+      ;;  ((looking-at "^\t")); good
+      ;;  ((looking-at "[^\n]+"); unscanned recipe text
+      ;;   (smart-mode-scan-trace-o (concat tag "#1.2") smart-mode-scan-dialect end t)
+      ;;   (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" smart-mode-scan-dialect (match-string 0))
+      ;;   (setq step (goto-char (match-end 0)))))
+      ); cond
+    ;;
+    ;; looking for ending of the recipe (continue or done)
+    (cond
+     ;; continue with next recipe
+     ((looking-at "\\(\n\\)\t"); \n\t
+      ;;(smart-mode-scan-trace-i (concat tag "#3") end)
+      (setq step (goto-char (match-end 1))))
+     ;; finished the recipe list ($ matches the end of file)
+     ((looking-at "\\(\n\\)\\(?:[^\t]\\|$\\)"); \n
+      ;;(smart-mode-scan-trace-i (concat tag "#4") end)
+      (setq step end result t))
+     ((not (looking-at "^\t"))
+      (setq step end result t))
+     (t
+      (smart-mode-scan-trace-i (concat tag "#5") end)
+      ;;(setq step end)
+      )))); defun
 
 (defun smart-mode-scan-recipe (end &optional scan semi)
   (smart-mode-scan* recipe
       ((begin (point)) (dialect smart-mode-scan-dialect))
-      (cond (semi (looking-back "[^\n];"))
+      (cond (semi (cond
+                   ((or (looking-back "\\][ \t]*")
+                        (looking-back ":[^;\n]")
+                        ;; continue lines between ']:' and ';'
+                        (looking-back "\\(?:\\]\\|:\\)\\(?:[^\\]*\\\\\n\\)+[ \t]*"))
+                    (looking-at ";"))
+                   ((smart-mode-scan-trace-o (concat tag "#0.1") dialect end t))))
             ((looking-at "^\t")))
-    ;;(unless scan (setq scan (smart-mode-select-dialect-scanner)))
-    ;; FIXME: (unless semi ...)
     ;;(smart-mode-scan-trace-o (concat tag "#1") dialect end t)
-    (cond
-     ((and scan (functionp scan)
-           (unwind-protect 
-               (funcall scan end)
-             ))
-      ;;(smart-mode-scan-trace-i (concat tag "#2.1") end)
-      (put-text-property begin (point) 'smart-semantic 'recipe)
-      (put-text-property begin (point) 'smart-dialect (make-symbol dialect))
-      (setq step end result t))
-     ((looking-at "\n")
-      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end)
+    (when (and scan (functionp scan))
+      ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
+      (funcall scan end)
+      (when (looking-at "[^\n]+"); unscanned recipe text
+        ;;(smart-mode-scan-trace-o (concat tag "#2.1") smart-mode-scan-dialect end t)
+        (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" dialect (match-string 0))
+        (goto-char (match-end 0)))
+      (setq step (point))); unwind-protect 
+    (when (looking-at "\n")
+      ;;(smart-mode-scan-trace-o (concat tag "#3") dialect end t)
       (goto-char (match-end 0))
-      (setq step end result t))
-     (t
-      ;;(smart-mode-scan-trace-i (concat tag "#2.3") end)
-      (setq step end))))); defun
+      (setq step end result t)))); defun
 
 (defun smart-mode-scan-recipe-builtin (end)
   (smart-mode-scan* recipe-builtin
@@ -2285,7 +2303,11 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     t)); defun
 
 (defun smart-mode-scan-recipe-c (end)
-  (smart-mode-scan* recipe-c () (looking-at "[^\n]")
+  (smart-mode-scan* recipe-c
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
     (smart-mode-scan-cc 'c end)
     ;; (when (looking-at "\\([^\n]+\\)")
     ;;   (smart-mode-warning-region (match-beginning 1) (match-end 1) "%s" (match-string 1))
@@ -2293,7 +2315,11 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (setq step end result t)))
 
 (defun smart-mode-scan-recipe-c++ (end)
-  (smart-mode-scan* recipe-c++ () (looking-at "[^\n]")
+  (smart-mode-scan* recipe-c++
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
     (smart-mode-scan-cc 'c++ end)
     ;; (when (looking-at "\\([^\n]+\\)")
     ;;   (smart-mode-warning-region (match-beginning 1) (match-end 1) "%s" (match-string 1))
@@ -2548,70 +2574,99 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (when (looking-at "__attribute__")
     ))
 
-(defun smart-mode-scan-recipe-sh (end) (smart-mode-scan-recipe-shell end))
-(defun smart-mode-scan-recipe-shell (end) (smart-mode-scan-recipe-bash end))
+(defun smart-mode-scan-recipe-sh (end)
+  (smart-mode-scan* recipe-sh
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
+    (smart-mode-scan-recipe-bash end)
+    (setq step end result t)))
+
+(defun smart-mode-scan-recipe-shell (end)
+  (smart-mode-scan* recipe-shell
+      ()
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
+    (smart-mode-scan-recipe-bash end)
+    (setq step end result t)))
+
 (defun smart-mode-scan-recipe-bash (end)
-  (let ((step (point)) (headword) (face) (pos))
-    ;;(smart-mode-scan-trace "recipe: #bash %s" (buffer-substring step (line-end-position)))
-    (while (and (< (point) end) (< step end) (looking-at "[^\n]"))
+  (smart-mode-scan** recipe-bash
+      ((headword) (face 'smart-mode-bash-command-name-face) (pos))
+      (if (looking-at "\n")
+          (prog1 nil (setq step end result t))
+        t)
+    (cond
+     ;;((and (looking-back "^") (looking-at "\t")); recipe tab prefix
+     ((looking-at "^\t"); recipe tab prefix
+      (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "[ \t]+"); spaces
+      (setq step (goto-char (match-end 0))))
+     ;; the @ prefix
+     ((cond
+       ((or (looking-at "^\t\\(@\\)")
+            (and (looking-back "^\t")
+                 (looking-at "\\(@\\)"))))
+       ((or (looking-at ";[ \t]*\\(@\\)")
+            (and (looking-back ";[ \t]*")
+                 (looking-at "\\(@\\)")))))
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "\\(\\\\\\)\n"); continual lines: \\\n
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "&&"); scan the &&
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-var-sign-face)
+      (setq step (goto-char (match-end 0)))
       (cond
-       ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
-        (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+       ((looking-at "\\w+"); variable name: $foobar
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
         (setq step (goto-char (match-end 0))))
-       ((and (looking-back "^\t\\|;[ \t]*") (looking-at "@")); the @ prefix
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
-        (setq step (goto-char (match-end 0))))
-       ((looking-at "\\(\\\\\\)\n"); continual lines
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
-        (setq step (goto-char (match-end 0))
-              ;;end (line-end-position)
-              )
-        ;; (when (looking-at "\t"); \t after continual escaping \
-        ;;   (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
-        ;;   (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-        ;;   (setq step (goto-char (match-end 0))))
-        )
-       ((looking-at "&&"); scan the &&
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
-        (setq step (goto-char (match-end 0))))
-       ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); bash variables: \$foobar $$foobar
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-var-sign-face)
-        (setq step (goto-char (match-end 0)))
-        (cond
-         ((looking-at "\\w+"); variable name: $foobar
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
-          (setq step (goto-char (match-end 0))))
-         ((looking-at "{"); parameter substitution: ${...}
-          (smart-mode-scan-bash-substitution)
-          (setq step (if (< step (point)) (point) (1+ step))))
-         ((looking-at ".")
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
-          (setq step (goto-char (match-end 0))))))
-       ((looking-at "[$&#]\\|[ \t]\\-"); $ & - etc.
-        (setq pos (match-end 0); save the end point
-              face (cond
-                    ;; comment: "#\\(?:\\\\n\t\\|[^\n]\\)*"
-                    ((string= (match-string 0) "#") 'smart-mode-comment-face)
-                    ;;((not headword) 'smart-mode-bash-command-name-face)
-                    (t 'smart-mode-no-face)))
-        (if (smart-mode-scan-expr end face)
-            (setq step (if (< step (point)) (point) (1+ step)))
-          (setq step (goto-char pos))))
-       ((looking-at (concat smart-mode-bash-builtins-regex "\\s-"))
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
-        (setq step (goto-char (match-end 0))))
-       ((looking-at smart-mode-bash-keywords-regex)
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
-        (setq step (goto-char (match-end 0))))
-       ((and (not (looking-at "[$&#]\\|\\\\[$]"))
-             (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
-        (setq step (goto-char (match-end 0))))
-       ((< (point) end); anything else
-        (forward-char); just move one step forward
-        (setq step (point)))))))
+       ((looking-at "{"); parameter substitution: ${...}
+        (smart-mode-scan-bash-substitution)
+        (setq step (point)))
+       ((looking-at ".")
+        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+        (setq step (goto-char (match-end 0))))))
+     ((looking-at "/[^/ \t\n]*")
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "'\\(?:\\\\.\\|[^'\n]\\)*'")
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-string-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "#")
+      (smart-mode-scan-comment end)
+      (setq step (point)))
+     ((looking-at "\\-")
+      (smart-mode-scan-flag end)
+      (setq step (point)))
+     ((looking-at "[$&]")
+      (smart-mode-scan-call end)
+      (setq step (point)))
+     ((looking-at (concat smart-mode-bash-builtins-regex "\\s-"))
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
+      (setq step (goto-char (match-end 0))
+            face 'smart-mode-no-face))
+     ((looking-at smart-mode-bash-keywords-regex)
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "[[:alpha:]_][[:alnum:]_+-]*")
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
+      (setq step (goto-char (match-end 0))
+            face 'smart-mode-no-face))
+     ((and (not (looking-at "[$&#]\\|\\\\[$]"))
+           (looking-at "\\(?:[{(|)}+-]\\|\\s.\\)+"))
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (setq step (goto-char (match-end 0))))
+     ((setq step (goto-char (1+ (point))))))))
 
 (defun smart-mode-scan-bash-substitution ()
   "See http://tldp.org/LDP/abs/html/parameter-substitution.html"
@@ -3524,11 +3579,12 @@ Returns `t' if there's a next dependency line, or nil."
         (indent (get-text-property pos 'smart-indent))
         (msg (get-text-property pos 'smart-message)))
     (cond
-     ((and msg semantic dialect) (message "%s %s: %s" semantic dialect msg))
-     ((and msg semantic) (message "%s -- %s" semantic msg))
-     ((and semantic dialect) (message "%s: #%s" semantic dialect))
-     ((and semantic) (message "%s" semantic))
-     ((and dialect) (message "#%s" dialect)))))
+     ((and msg semantic dialect) (message "(%s) %s %s: %s" (point) semantic dialect msg))
+     ((and msg semantic) (message "(%s) %s -- %s" (point) semantic msg))
+     ((and semantic dialect) (message "(%s) %s: #%s" (point) semantic dialect))
+     ((and semantic) (message "(%s) %s" (point) semantic))
+     ((and dialect) (message "(%s) #%s" (point) dialect))
+     ((message "(%s)" (point))))))
 
 (defun smart-mode-message-properties (&optional pos)
   "Show text properties at point."
