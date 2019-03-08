@@ -858,8 +858,11 @@
        (save-match-data
          (let ((inhibit-point-motion-hooks t); prevent point motion hooks
                (inhibit-quit t); prevent quit emacs while scanning
-               (semantic (get-text-property beg 'smart-semantic))
-               (dialect) (scan))
+               (semantic (or (get-text-property (point) 'smart-semantic)
+                             (get-text-property (1+ beg) 'smart-semantic)
+                             (get-text-property beg 'smart-semantic)))
+               (dialect)
+               (scan))
            (when (and semantic (not dialect))
              (cond
               ((equal semantic 'recipe)
@@ -875,32 +878,28 @@
            (smart-mode-scan-trace "region#0: [%s,%s) %s" (point) end (buffer-substring (point) (min (line-end-position) end)))
 
            (cond
-            ((and smart-mode-scan-beg
-                  smart-mode-scan-end
-                  (equal smart-mode-scan-beg beg)
-                  (equal smart-mode-scan-end end))
-             (smart-mode-scan-trace "region: #semantic(%s) #dialect(%s) [%d,%d) skip scanned" semantic dialect beg end))
-            ((and nil semantic dialect); dialect specific scanners
+            ;;((and smart-mode-scan-beg (equal smart-mode-scan-beg beg)
+            ;;      smart-mode-scan-end (equal smart-mode-scan-end end))
+            ;; (smart-mode-scan-trace "region: #semantic(%s) #dialect(%s) [%d,%d) skip scanned" semantic dialect beg end))
+            ((and semantic dialect); dialect specific scanners
              (if (smart-mode-scan-region-specific end (format "%s-%s" semantic dialect))
-                 (progn
+                          (progn
                    ;;(put-text-property beg end 'smart-semantic semantic)
                    ;;(put-text-property beg end 'smart-dialect dialect)
                    t)
                (smart-mode-scan-trace "region: #%s(%s) unimplemented scanner" semantic dialect)))
-            ((and nil semantic); semantic specific scanners
+            ((and semantic); semantic specific scanners
              (if (smart-mode-scan-region-specific end semantic)
                  (progn
                    ;;(put-text-property beg end 'smart-semantic semantic)
                    t)
                (smart-mode-scan-trace "region: #%s unimplemented scanner" semantic)))
-            ((setq smart-mode-scan-beg beg
-                   smart-mode-scan-end end)
-             (smart-mode-scan end)))
-
-           (smart-mode-scan-trace "region##: [%s,%s) %s" (point) end (buffer-substring (point) (min (line-end-position) end)))
+            ((smart-mode-scan end)))
 
            (setq smart-mode-scan-beg beg
                  smart-mode-scan-beg end)
+
+           (smart-mode-scan-trace "region##: [%s,%s) %s" (point) end (buffer-substring (point) (min (line-end-position) end)))
 
            ;; Returns the cons (beg . end)
            (cons beg end)))))))
@@ -1521,6 +1520,7 @@
 (defun smart-mode-scan-combine (end suggested-face &optional re)
   (when (< (point) end)
     (cond
+     ((looking-at "[=-]>") (smart-mode-scan-sel end suggested-face))
      ((and (looking-back "[^ \t]") (looking-at "("))
       ;; scanning argumented expressions
       (smart-mode-scan-group end suggested-face))
@@ -2141,12 +2141,15 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (smart-mode-scan** recipe-list
       ((begin step) (pos))
       (and (looking-back "^") (looking-at "\t"))
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-    (while (looking-at "^\t"); keep scanning for recipes
-      ;;(smart-mode-scan-trace-o (concat tag "#1") smart-mode-scan-dialect end t)
+    ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+    ;; keep scanning for recipes
+    (while (looking-at "^\t");;(and (looking-back "^") (looking-at "\t"))
+      ;;(smart-mode-scan-trace-o (concat tag "#1.0") smart-mode-scan-dialect end t)
       (if (smart-mode-scan-recipe end scanner nil)
-          (setq step (point))
-        (smart-mode-scan-trace-o (concat tag "#1.1") smart-mode-scan-dialect end t))
+          (progn
+            ;;(smart-mode-scan-trace-o (concat tag "#1.1") smart-mode-scan-dialect end t)
+            (setq step (point)))
+        (smart-mode-scan-trace-o (concat tag "#1.2") smart-mode-scan-dialect end t))
       ;; (cond
       ;;  ((looking-at "^\t")); good
       ;;  ((looking-at "[^\n]+"); unscanned recipe text
@@ -2165,12 +2168,11 @@ delim. Escape characters and continual lines are processed. Using `recipe'
      ((looking-at "\\(\n\\)\\(?:[^\t]\\|$\\)"); \n
       ;;(smart-mode-scan-trace-i (concat tag "#4") end)
       (setq step end result t))
-     ((not (looking-at "^\t"))
-      (setq step end result t))
+     ((not (looking-at "^\t")) (setq step end result t))
      (t
       (smart-mode-scan-trace-i (concat tag "#5") end)
       ;;(setq step end)
-      )))); defun
+      nil)))); defun
 
 (defun smart-mode-scan-recipe (end &optional scan semi)
   (smart-mode-scan* recipe
@@ -2183,21 +2185,25 @@ delim. Escape characters and continual lines are processed. Using `recipe'
                     (looking-at ";"))
                    ((smart-mode-scan-trace-o (concat tag "#0.1") dialect end t))))
             ((looking-at "^\t")))
+    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
     ;;(smart-mode-scan-trace-o (concat tag "#1") dialect end t)
     (when (and scan (functionp scan))
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
-      (funcall scan end)
+      (unless (funcall scan end)
+        (smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
       (when (looking-at "[^\n]+"); unscanned recipe text
-        ;;(smart-mode-scan-trace-o (concat tag "#2.1") smart-mode-scan-dialect end t)
+        ;;(smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
         (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" dialect (match-string 0))
         (goto-char (match-end 0)))
       (setq step (point))); unwind-protect 
-    (when (looking-at "\n")
-      ;;(smart-mode-scan-trace-o (concat tag "#3") dialect end t)
-      (goto-char (match-end 0))
-      (put-text-property begin (point) 'smart-semantic 'recipe)
-      (put-text-property begin (point) 'smart-dialect (make-symbol dialect))
-      (setq step end result t)))); defun
+    (if (looking-at "\n")
+        (progn
+          (goto-char (match-end 0))
+          (put-text-property begin (point) 'smart-semantic 'recipe)
+          (put-text-property begin (point) 'smart-dialect (make-symbol dialect))
+          ;;(smart-mode-scan-trace-o (concat tag "#3.1") dialect end t)
+          (setq step end result t))
+      (smart-mode-scan-trace-o (concat tag "#3.2") dialect end t)))); defun
 
 (defun smart-mode-scan-recipe-builtin (end)
   (smart-mode-scan* recipe-builtin
@@ -2246,7 +2252,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
             (progn
               ;;(smart-mode-scan-trace-i (concat tag "#3.1.1") end t)
               (setq step (point)))
-          ;;(smart-mode-scan-trace-i (concat tag "#3.1.2") end t)
+          (smart-mode-scan-trace-i (concat tag "#3.1.2") end t)
           (setq step (point))))
        ((string= kind 'builtin)
         ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
@@ -2254,33 +2260,33 @@ delim. Escape characters and continual lines are processed. Using `recipe'
             (progn 
               ;;(smart-mode-scan-trace-i (concat tag "#3.2.1") end t)
               (setq step (point)))
-          ;;(smart-mode-scan-trace-i (concat tag "#3.2.2") end t)
+          (smart-mode-scan-trace-i (concat tag "#3.2.2") end t)
           (setq step (point))))
        ((string= kind 'value)
         ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
         t)
-       ((smart-mode-scan-trace-o (concat tag "#3.4") kind end)))); when
+       ((smart-mode-scan-trace-o (concat tag "#3.4") kind end t)))); when
     ;; any unscaned characters
     (when (looking-at "[^\n]+")
-     ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-     (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin expressions: %s" (match-string 0))
-     (setq step (goto-char (match-end 0)))); when
+      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin expressions: %s" (match-string 0))
+      (setq step (goto-char (match-end 0)))); when
     ;;
     (when (< step end)
       (cond; Note that the line feed at the end is remained!
        ;; all scanned, results t 
        ((looking-at "\n"); could see \t if more recipes
-        ;;(smart-mode-scan-trace-i (concat tag "#4.1") end)
+        ;;(smart-mode-scan-trace-i (concat tag "#4.1") end t)
         ;;(goto-char (match-end 0))
         (setq step end result t))
        ;; partially scanned but still good and result t 
        ((looking-at "\t[ \t]*\\([^\n]+\\)\n")
-        ;;(smart-mode-scan-trace-i (concat tag "#4.2") end)
+        ;;(smart-mode-scan-trace-i (concat tag "#4.2") end t)
         (smart-mode-warning-region (match-beginning 1) (match-end 1) "unscanned builtin recipe: %s" (match-string 1))
         (goto-char (match-end 1))
         (setq step end result t))
        ((setq step end)
-        (smart-mode-scan-trace-i (concat tag "#4.3") end)
+        (smart-mode-scan-trace-i (concat tag "#4.3") end t)
         nil))))); defun
 
 (defun smart-mode-scan-recipe-text (end)
@@ -2378,7 +2384,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (let ((beg (point)) (step))
     (when (looking-at "//")
       (setq step (goto-char (match-end 0)))
-      ;;(smart-mode-scan-trace "recipe: #cc-comment1(%s) %s" lang (buffer-substring beg end))
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "$"); end of scanning
@@ -2391,7 +2396,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (when (looking-at "/*")
     (let ((beg (point)) (step))
       (setq step (goto-char (match-end 0)))
-      (smart-mode-scan-trace "recipe: #cc-comment2(%s) %s" lang (buffer-substring beg end))
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "*/"); end of scanning
@@ -2405,13 +2409,11 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "|"))
     ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
     (let ((beg (match-beginning 0)) (step (goto-char (match-end 0))))
-      ;;(smart-mode-scan-trace "recipe: #cc-string(%s) %s" lang (buffer-substring beg end))
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "\\\\\""); escaping \"
           (setq step (goto-char (match-end 0))))
          ((looking-at "\""); end of scanning string
-          (smart-mode-scan-trace "recipe: #cc-string(%s) %s" lang (buffer-substring beg (match-end 0)))
           (put-text-property (match-beginning 0) (1+ (match-end 0)) 'syntax-table (string-to-syntax "|"))
           (put-text-property beg (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
           (goto-char (match-end 0))
@@ -2421,7 +2423,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
 (defun smart-mode-scan-cc-preprocessor (lang end)
   (when (looking-at "#")
     (let ((step (point)) (name))
-      (smart-mode-scan-trace "recipe: #cc-preprocessor(%s) %s" lang (buffer-substring step end))
       (while (and (< step end) (< (point) end) (looking-at "[^\n]"))
         (cond
          ((looking-at "[ \t]+"); spaces
@@ -2450,7 +2451,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
     (let ((beg (match-beginning 1)) (step (goto-char (match-end 1)))
           (kind (match-string 1)) (name) (pos))
-      ;;(smart-mode-scan-trace "recipe: #cc-record(%s) %s" lang (buffer-substring step end))
       (while (and (< (point) end) (< step end))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
@@ -2476,7 +2476,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
            ((string-match-p smart-mode-c++-keywords-regex (match-string 1))
             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face))
            ((not name)
-            ;;(smart-mode-scan-trace "recipe: #cc-record(%s) %s" lang (match-string 0))
             (setq name (match-string 1)); cache the record name
             (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face))
            ((and name); already scanned and cached name
@@ -2502,7 +2501,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
       (while (and (< step end) (< (point) end) (< (point) (point-max)))
-        ;;(smart-mode-scan-trace "recipe: #cc-record-body(%s) %s" lang (buffer-substring step end))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
           ;;(put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
@@ -2543,7 +2541,6 @@ delim. Escape characters and continual lines are processed. Using `recipe'
           ;; TODO: method body { ... } 
           )
          ((looking-at "}"); ending of the record (still looking for ';')
-          (smart-mode-scan-trace "recipe: #cc-record-body(%s) %s" lang (buffer-substring step end))
           (cond
            ((and member-body-beg)
             (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
@@ -3673,7 +3670,8 @@ Returns `t' if there's a next dependency line, or nil."
   (if smart-mode-message-on (apply 'message fmt args)))
 
 (defun smart-mode-scan-trace (fmt &rest args)
-  (if smart-mode-scan-trace-on (apply 'message (concat "scan-" fmt) args)))
+  ;;(if smart-mode-scan-trace-on (apply 'message (concat "scan-" fmt) args))
+  (apply 'message (concat "scan-" fmt) args))
 (defun smart-mode-scan-trace-i (tag end &optional on)
   (if (or on smart-mode-scan-trace-on)
       (apply 'message (concat "scan" (if tag (concat "-" tag) "") ":[%s,%s) %s")
