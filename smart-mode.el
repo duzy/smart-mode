@@ -1732,8 +1732,8 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "too many slashes")
       (setq step (goto-char (match-end 0)))))); defun
 
-(defun smart-mode-scan-tilde (end &optional suggested-face) ; .foo
-  (smart-mode-scan* tilde () (looking-at "\\.")
+(defun smart-mode-scan-tilde (end &optional suggested-face) ; ~/foo
+  (smart-mode-scan* tilde () (looking-at "[~]")
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-tilde-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
