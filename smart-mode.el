@@ -123,7 +123,7 @@
   "Regex to match support project options.")
 
 (defconst smart-mode-special-var-names ; $:xxx:
-  `("usee" "self")
+  `("os" "usee" "self")
   "List of special variable names.")
 (defconst smart-mode-special-var-names-regex
   (regexp-opt smart-mode-special-var-names 'words)
