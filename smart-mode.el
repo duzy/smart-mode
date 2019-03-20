@@ -2133,15 +2133,17 @@ delim. Escape characters and continual lines are processed. Using `recipe'
 (defun smart-mode-scan-recipes (semi end)
   (smart-mode-scan* recipes
       ((scanner (smart-mode-select-dialect-scanner)) (pos))
-      (or (and semi (looking-at ";[ \t]*"))
-          (and (looking-back "^") (looking-at "\t")))
+      (cond
+       ((and semi (looking-at ";[ \t]*"))
+        ;;(smart-mode-scan-trace-o (concat tag "#0.1") smart-mode-scan-dialect end t)
+        t)
+       ((and (looking-back "^") (looking-at "\t"))
+        ;;(smart-mode-scan-trace-o (concat tag "#0.2") smart-mode-scan-dialect end t)
+        t))
     (and
      (cond
-      ;; single (semi) recipe only 
+      ;; single recipe only (semi)
       ((and semi (number-or-marker-p semi))
-       (put-text-property semi (+ semi 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
-       (put-text-property semi (+ semi 1) 'smart-semantic 'recipe)
-       (setq step (goto-char (match-end 0)))
        (if (smart-mode-scan-recipe end scanner t)
            (setq step end result t)
          (setq step end))
@@ -2199,15 +2201,20 @@ delim. Escape characters and continual lines are processed. Using `recipe'
 (defun smart-mode-scan-recipe (end &optional scan semi)
   (smart-mode-scan* recipe
       ((begin (point)) (dialect smart-mode-scan-dialect))
-      (cond (semi (cond
-                   ((or (looking-back "\\][ \t]*")
-                        (looking-back ":[^;\n]")
-                        ;; continue lines between ']:' and ';'
-                        (looking-back "\\(?:\\]\\|:\\)\\(?:[^\\]*\\\\\n\\)+[ \t]*"))
-                    (looking-at ";"))
-                   ((smart-mode-scan-trace-o (concat tag "#0.1") dialect end t))))
-            ((looking-at "^\t")))
+      (cond
+       ;; semi recipe (single)
+       (semi (cond
+              ((or (looking-back "\\][ \t]*")
+                   (looking-back ":[^;\n]")
+                   ;; continual lines between ']:' and ';'
+                   (looking-back "\\(?:\\]\\|:\\)\\(?:[^\\]*\\\\\n\\)+[ \t]*"))
+               (looking-at ";"))
+              ((smart-mode-scan-trace-o (concat tag "#0.1") dialect end t)
+               nil)))
+       ;; tabby recipe (list)
+       ((looking-at "^\t")))
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+    (setq step (goto-char (match-end 0))); '^\t' or ';'
     ;;(smart-mode-scan-trace-o (concat tag "#1") dialect end t)
     (when (and scan (functionp scan))
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
