@@ -2037,7 +2037,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (unless single
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face))
       (put-text-property begin (match-end 0) 'smart-semantic stmt); Set stmt semantic first!
-      (put-text-property spec-begin (match-beginning 0) 'smart-semantic (make-symbol (concat "spec-" stmt)))
+      (put-text-property (1- spec-begin) (match-beginning 0) 'smart-semantic (make-symbol (concat "spec-" stmt)))
       (goto-char (match-end 0)); just skip the endings
       (setq step end result t); Success: results t!
       (unless single
