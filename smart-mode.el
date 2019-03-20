@@ -894,7 +894,7 @@
                   smart-mode-scan-end (equal smart-mode-scan-end end))
              (smart-mode-scan-trace "region#0: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end))))
             ((and semantic dialect); dialect specific scanners
-             (if (smart-mode-scan-region-specific end (format "%s-%s" semantic dialect))
+             (if (smart-mode-scan-region-specific end (format "%s-%s" semantic dialect) semantic)
                  (progn
                    ;;(smart-mode-scan-trace "region#1: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end)))
                    ;;(put-text-property beg end 'smart-semantic semantic)
@@ -902,7 +902,7 @@
                    t)
                (smart-mode-scan-trace "region#1.1: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end)))))
             ((and semantic); semantic specific scanners
-             (if (smart-mode-scan-region-specific end semantic)
+             (if (smart-mode-scan-region-specific end (format "%s" semantic) semantic)
                  (progn
                    ;;(smart-mode-scan-trace "region#2: #%s [%s,%s) %s" semantic (point) end (buffer-substring (point) (min (line-end-position) end)))
                    ;;(put-text-property beg end 'smart-semantic semantic)
@@ -918,12 +918,19 @@
            ;; Returns the cons (beg . end)
            (cons beg end)))))))
 
-(defun smart-mode-scan-region-specific (end name)
+(defun smart-mode-scan-region-specific (end name semantic)
   (when (functionp (setq scan (intern-soft (format "smart-mode-scan-%s" name))))
     (unwind-protect 
         (progn
+          ;;(smart-mode-scan-trace "region-specific#1: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
+          (while (and (< (point-min) (point))
+                      (equal (get-text-property (1- (point)) 'smart-semantic) semantic))
+            (backward-char))
+          (while (and (< end (point-max))
+                      (equal (get-text-property end 'smart-semantic) semantic))
+            (setq end (1+ end)))
+          ;;(smart-mode-scan-trace "region-specific#2: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
           (smart-mode-scan-trace "region-specific: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
-          (setq end (smart-mode-beginning-of-line))
           (funcall scan end))
       (when (< (point) end)
         (smart-mode-warning-region (point) end "unscanned %s specific region" name)
@@ -1088,7 +1095,7 @@
      (cond
       ;;
       ;; assignments: foo := ...
-      ((looking-at (concat smart-mode-assign-regex "[ \t]*"))
+      ((looking-at smart-mode-assign-regex)
        (when (smart-mode-scan-assign begin end)
          (setq step end result t)))
       ;;
@@ -1108,19 +1115,76 @@
       ((smart-mode-scan-rule-rest-targets begin end)
        (setq step end result t)))))); defun
 
+(defun smart-mode-scan-assign-name (end); region-specific
+  (smart-mode-scan* assign-name
+      ((begin (point)))
+      (smart-mode-scan-expr end)
+    (put-text-property begin (point) 'smart-semantic 'assign-name)
+    (put-text-property begin (point) 'font-lock-face 'smart-mode-assign-name-face)
+    (setq step (point))
+    (when (looking-at "[ \t]+"); spaces
+      (setq step (goto-char (match-end 0))))
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (if (looking-at (concat "[ \t]*" smart-mode-assign-regex "[ \t]*"))
+        (progn
+          ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+          (goto-char (match-end 0))
+          (setq step end result t))
+      (smart-mode-warning-region (point) end "invalid expression of assignment")
+      ;;(setq step (point))
+      )))
+
+(defun smart-mode-scan-assign-sign (end); region-specific
+  (smart-mode-scan* assign-sign
+      ((begin (point)) (values end))
+      (looking-at (concat "[ \t]*" smart-mode-assign-regex))
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
+    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+    (setq step (goto-char (match-end 0)))
+    (while (and (< values (point-max))
+                (equal (get-text-property values 'smart-semantic) 'assign-values))
+      (setq values (1+ values)))
+    (remove-text-properties step values '(font-lock-face face))
+    ;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (when (smart-mode-scan-assign-values values)
+      ;;(smart-mode-scan-trace-i (concat tag "#2") values t)
+      (setq step (point) result t))))
+
+(defun smart-mode-scan-assign-values (end)
+  (smart-mode-scan* assign-values
+      ((begin (point)))
+      (looking-back (concat smart-mode-assign-regex "[ \t]*"))
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    (setq step (goto-char (match-end 0))
+          begin (match-end 1))
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (when (smart-mode-scan-list end 'smart-mode-no-face)
+      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+      (cond
+       ((looking-at "\n") (setq step (goto-char (match-end 0)) result t))
+       ((looking-at "#") (setq step (match-beginning 0) result t))
+       ((looking-at "$") (setq step (match-end 0) result t)))
+      (put-text-property begin step 'smart-semantic 'assign-values)
+      (if (looking-at "\n+")
+          (setq step (goto-char (match-end 0)))))))
+
 (defun smart-mode-scan-assign (begin end)
   (smart-mode-scan* assign () (< begin end)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+    (put-text-property begin (match-beginning 1) 'smart-semantic 'assign-name)
     (put-text-property begin (match-beginning 1) 'font-lock-face 'smart-mode-assign-name-face)
-    (setq step (goto-char (match-end 0)))
-    (if (looking-at "[ \t]+"); spaces
-        (setq step (goto-char (match-end 0))))
-    (when (smart-mode-scan-list end 'smart-mode-no-face)
-      (setq result (looking-at "\n\\|$"))
-      (if (looking-at "\n+")
-          (setq step (goto-char (match-end 0)))))
-    (if (looking-at "[#\n]")
-        (setq result t))))
+    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
+    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+    (setq step (goto-char (match-end 1)))
+    (and
+     (smart-mode-scan-assign-values end)
+     (setq step (point) result t))))
+
+(defun smart-mode-scan-rule-targets (end); region-specific
+  (smart-mode-scan* rule-targets () t
+    (smart-mode-scan-rule-rest-targets (point) end)))
 
 (defun smart-mode-scan-rule-rest-targets (begin end)
   (smart-mode-scan* rule-rest-targets () (looking-at "[^#\n]")
@@ -2213,8 +2277,10 @@ delim. Escape characters and continual lines are processed. Using `recipe'
                nil)))
        ;; tabby recipe (list)
        ((looking-at "^\t")))
+    (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-    (setq step (goto-char (match-end 0))); '^\t' or ';'
+    (setq step (goto-char (match-end 0)); '^\t' or ';'
+          begin step)
     ;;(smart-mode-scan-trace-o (concat tag "#1") dialect end t)
     (when (and scan (functionp scan))
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
@@ -2368,7 +2434,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (smart-mode-scan** cc () (looking-at "[^\n]")
     (cond
      ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
-      ;;(put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+      (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
      ((and (looking-back "^\t") (looking-at "#"))
@@ -2483,7 +2549,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (while (and (< (point) end) (< step end))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
-          ;;(put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
+          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
@@ -2524,13 +2590,13 @@ delim. Escape characters and continual lines are processed. Using `recipe'
           (member-body-beg) (member-body-end); functions, inner-records
           (stop))
       (when (looking-at "\n\\(\t\\)"); continue with the next recipe
-        ;;(put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
+        (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
       (while (and (< step end) (< (point) end) (< (point) (point-max)))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
-          ;;(put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe)
+          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
           (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
@@ -2626,7 +2692,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (cond
      ;;((and (looking-back "^") (looking-at "\t")); recipe tab prefix
      ((looking-at "^\t"); recipe tab prefix
-      ;;(put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe)
+      (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[ \t]+"); spaces
@@ -3140,9 +3206,11 @@ Returns `t' if there's a next dependency line, or nil."
     (insert "\n"); start a new line, don't use (newline) to avoid unnecessary indent
     (setq beg (point))
     (insert "\t"); insert tab
+    ;;(put-text-property beg (point) 'smart-semantic 'recipe-prefix)
+    ;;(setq beg (point))
     (setq end (1+ (point)))
-    (put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
-    (put-text-property beg end 'smart-dialect (make-symbol dialect))
+    ;;(put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
+    ;;(put-text-property beg end 'smart-dialect (make-symbol dialect))
     ;;;; FIXME: let scanner handle with overlays
     ;;(smart-mode-put-recipe-overlays beg end)
     ))
