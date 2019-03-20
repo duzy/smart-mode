@@ -2159,30 +2159,64 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        (smart-mode-warning-region (match-beginning 1) end "configuration spec error#2")
        (setq step (goto-char (match-end 0)))))))); defun
 
+(defun smart-mode-scan-eval (end); region-specific
+  (smart-mode-scan* eval ((begin (point)) (spec end)) (< begin end)
+    (cond
+     ((looking-at "[ \t]*\\(eval\\)")
+      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+      (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'eval)
+      (while (and (< spec (point-max))
+                  (equal (get-text-property spec 'smart-semantic) 'eval-spec))
+        (setq spec (1+ spec)))
+      (setq step (goto-char (match-end 1))
+            begin step)
+      (put-text-property begin spec 'smart-semantic 'spec-eval)
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
+      (when (smart-mode-scan-spec-eval spec)
+        (setq step (point) result t)))
+     ((looking-at "[ \t]*\\([^ \t]+\\)")
+      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+      (smart-mode-warning-region (match-beginning 1) (match-end 1) "expects 'eval'")
+      (setq step end)
+      nil))))
+
 (defun smart-mode-scan-spec-eval (end)
   (smart-mode-scan* spec-eval () (looking-at "[^\n]")
     ;;(looking-back "^[ \t]*\\(?:eval\\)?[ \t]*"); at the beginning of line
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    (if (looking-at "[ \t]+"); spaces
+        (setq step (goto-char (match-end 0))))
+    (while (and (< end (point-max))
+                (equal (get-text-property end 'smart-semantic) 'eval-spec))
+      (setq end (1+ end)))
     (and
-     ;;(message "spec#1: #eval %s" (buffer-substring (point) (line-end-position)))
      (cond
       ;; Builtin commands
       ((looking-at smart-mode-builtins-regex)
+       ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
-       (goto-char (match-end 0)))
+       (setq step (goto-char (match-end 0))))
       ;; User expressions: user->xxx +=
       ((looking-at (concat "\\(user\\)[=-]>")); user=>  user->
+       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid eval spec: %s" (match-string 0))
-       (goto-char (match-end 0)))
+       (setq step (goto-char (match-end 0))))
       ;; Unknown commands
-      ((and (setq pos (point))
-            (smart-mode-scan-expr end 'smart-mode-warning-face))
+      ((smart-mode-scan-expr end 'smart-mode-warning-face)
+       ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
        (smart-mode-warning-region pos (point) "unknown builtin: %s" (buffer-substring pos (point)))
-       (setq step (if (< step (point)) (point) (1+ step)))))
-     ;;(message "spec#2: #eval %s" (buffer-substring (point) (line-end-position)))
-     (if (looking-at "[ \t]+") (goto-char (match-end 0))
+       (setq step (if (< step (point)) (point) (1+ step))))
+      ;; ERRORS!
+      ((smart-mode-scan-trace-i (concat tag "#4") end t)
+       nil))
+     ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
+     (if (looking-at "[ \t]+")
+         (setq step (goto-char (match-end 0)))
        t)
+     ;;(smart-mode-scan-trace-i (concat tag "#6") end t)
      (smart-mode-scan-list end 'smart-mode-no-face)
-     (setq result t)))); defun
+     ;;(smart-mode-scan-trace-i (concat tag "#7") end t)
+     (setq step end result t)))); defun
 
 (defun smart-mode-select-dialect-scanner ()
   (unless smart-mode-scan-dialect
