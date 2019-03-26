@@ -1482,7 +1482,7 @@
     (if (cond
          ((looking-at "#") (smart-mode-scan-comment end))
          ((looking-at "(") (smart-mode-scan-group end suggested-face))
-         ((looking-at "[=-]>") (smart-mode-scan-sel end suggested-face))
+         ((looking-at "[=-]>\\|[→⇢⇒]") (smart-mode-scan-sel end suggested-face))
          ((looking-at "=[^>]") (smart-mode-scan-pair end 'smart-mode-pair-value-face))
          ((looking-at "'")
           (and (smart-mode-scan-string end suggested-face)
@@ -1535,7 +1535,7 @@
 (defun smart-mode-scan-combine (end suggested-face &optional re)
   (when (< (point) end)
     (cond
-     ((looking-at "[=-]>") (smart-mode-scan-sel end suggested-face))
+     ((looking-at "[=-]>\\|[→⇢⇒]") (smart-mode-scan-sel end suggested-face))
      ((and (looking-back "[^ \t]") (looking-at "("))
       ;; scanning argumented expressions
       (smart-mode-scan-group end suggested-face))
@@ -1762,10 +1762,10 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step end result t)))))
 
 (defun smart-mode-scan-sel (end &optional suggested-face) ; ->bar =>bar
-  (smart-mode-scan* sel ((face suggested-face)) (looking-at "[=-]>")
+  (smart-mode-scan* sel ((face suggested-face)) (looking-at "[=-]>\\|[→⇢⇒]")
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-arrow-face)
     (setq step (goto-char (match-end 0)))
-    (when (looking-at "\\(?:[=-]>\\)+"); continual arrows: -> =>
+    (when (looking-at "\\(?:[=-]>\\|[→⇢⇒]\\)+"); continual arrows: -> =>
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid selection")
       (setq step (goto-char (match-end 0))))
     (unless face
@@ -1826,7 +1826,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       ;;
       ;; looking at selection call names
       (and
-       (looking-at "[=-]>") ; $(foo->... $(foo=>...
+       (looking-at "[=-]>\\|[→⇢⇒]") ; $(foo->... $(foo=>...
        (smart-mode-scan-sel end face)
        (setq step (point)))
       ;;
@@ -2067,7 +2067,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        (smart-mode-warning-region (point) (line-end-position) "invalid files spec")
        (setq step (goto-char (line-end-position)))
        nil); Nil on failure to stop!
-     (when (looking-at "[ \t]*\\(=>\\)[ \t]*")
+     (when (looking-at "[ \t]*\\(=>\\|[→⇢⇒ → ]\\)[ \t]*")
        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-arrow-face)
        (setq step (goto-char (match-end 0))))
      (if (smart-mode-scan-expr end 'smart-mode-pseg-face)
@@ -2106,7 +2106,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
        (goto-char (match-end 0)))
       ;; User expressions: user->xxx +=
-      ((looking-at (concat "\\(user\\)[=-]>")); user=>  user->
+      ((looking-at (concat "\\(user\\)\\(?:[=-]>\\|[→⇢⇒]\\)")); user=>  user->
        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid eval spec: %s" (match-string 0))
        (goto-char (match-end 0)))
       ;; Unknown commands
@@ -2243,7 +2243,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; User expressions: user->xxx +=
-     ((looking-at (concat "\\(user\\)\\(?:\\([=-]>\\)\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
+     ((looking-at (concat "\\(user\\)\\(?:\\([=-]>\\|[→⇢⇒]\\)\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
       ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
       (smart-mode-match-set-face-goto 1 'font-lock-keyword-face)
       (if (string-equal (match-string 2) "=>")
