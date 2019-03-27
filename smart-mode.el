@@ -3408,12 +3408,12 @@ Returns `t' if there's a next dependency line, or nil."
    ((looking-back "[^-]-")
     (delete-backward-char 1); delete dash '-'
     (insert "→"))
-   ((looking-back "[^.]...")
-    (delete-backward-char 3); delete dots '...'
-    (insert "⇢"))
    ((looking-back "[^=]=")
     (delete-backward-char 1); delete '='
     (insert (if nil "⇢" "⇒")))
+   ((looking-back "[^\\.]\\.\\.\\.")
+    (delete-backward-char 3); delete dots '...'
+    (insert "⇢"))
    ((insert ">")))
   (smart-mode-update-mode-line (point)))
 
