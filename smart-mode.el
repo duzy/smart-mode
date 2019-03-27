@@ -1772,7 +1772,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (while (and (< step end) (< (point) end) (not result))
       (cond
        ;; escaped characters \" \$ etc
-       ((looking-at (concat "\\(?:\\\\.\\|[^\"$&]\\)+"))
+       ((looking-at (concat "\\(?:\\\\.\\|&&\\|\\$\\$\\|[^\"$&]\\)+"))
         (setq step (goto-char (match-end 0))))
        ((looking-at "[$&]")
         (if (< lastpoint (match-beginning 0))
@@ -3405,10 +3405,13 @@ Returns `t' if there's a next dependency line, or nil."
 (defun smart-mode-try-unicode-arrows ()
   (interactive)
   (cond
-   ((looking-back "[^-]-")
+   ((looking-back "~"); ⇜⇝ ↜↝ ⬿⤳ ⬳⟿
+    (delete-backward-char 1); delete '~'
+    (insert "⤳"))
+   ((looking-back "[^-]-"); ￩ ￫ ￪ ￬
     (delete-backward-char 1); delete dash '-'
     (insert "→"))
-   ((looking-back "[^=]=")
+   ((looking-back "[^=]="); ⇐⇑⇒⇓⇔⇕⇖⇗⇘⇙ ⟸⟹ ⟺
     (delete-backward-char 1); delete '='
     (insert (if nil "⇢" "⇒")))
    ((looking-back "[^\\.]\\.\\.\\.")
