@@ -291,6 +291,18 @@
   "[ \t\n,#=:|(){}]\\|\\]\\|\\["
   "Delimiters to prevent scan combination in smart editing mode.")
 
+(defconst smart-mode-selection-arrows
+  "[=-]>\\|[→⇢⇒]"
+  "Selection arrow operators.")
+
+(defconst smart-mode-selection-arrows-capture
+  (concat "\\(" smart-mode-selection-arrows "\\)")
+  "Selection arrow operators.")
+
+(defconst smart-mode-selection-arrows-nocapture
+  (concat "\\(?:" smart-mode-selection-arrows "\\)")
+  "Selection arrow operators.")
+
 ;;---- CUSTOMS -----------------------------------------------------------
 
 (defcustom smart-mode-hook nil
@@ -748,6 +760,9 @@
     (define-key map "\C-a"     'smart-mode-go-backward) ;; C-a
     (define-key map "\C-e"     'smart-mode-go-forward) ;; C-e
     ;;(define-key map "\\"       'smart-mode-backslash) ;; \
+
+    (define-key map ">" 'smart-mode-try-unicode-arrows)
+    
     map)
   "The keymap that is used in smart mode.")
 
@@ -1546,7 +1561,7 @@
     (if (cond
          ((looking-at "#") (smart-mode-scan-comment end))
          ((looking-at "(") (smart-mode-scan-group end suggested-face))
-         ((looking-at "[=-]>\\|[→⇢⇒]") (smart-mode-scan-sel end suggested-face))
+         ((looking-at smart-mode-selection-arrows) (smart-mode-scan-sel end suggested-face))
          ((looking-at "=[^>]") (smart-mode-scan-pair end 'smart-mode-pair-value-face))
          ((looking-at "'")
           (and (smart-mode-scan-string end suggested-face)
@@ -1599,7 +1614,7 @@
 (defun smart-mode-scan-combine (end suggested-face &optional re)
   (when (< (point) end)
     (cond
-     ((looking-at "[=-]>\\|[→⇢⇒]") (smart-mode-scan-sel end suggested-face))
+     ((looking-at smart-mode-selection-arrows) (smart-mode-scan-sel end suggested-face))
      ((and (looking-back "[^ \t]") (looking-at "("))
       ;; scanning argumented expressions
       (smart-mode-scan-group end suggested-face))
@@ -1826,10 +1841,10 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step end result t)))))
 
 (defun smart-mode-scan-sel (end &optional suggested-face) ; ->bar =>bar
-  (smart-mode-scan* sel ((face suggested-face)) (looking-at "[=-]>\\|[→⇢⇒]")
+  (smart-mode-scan* sel ((face suggested-face)) (looking-at smart-mode-selection-arrows)
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-arrow-face)
     (setq step (goto-char (match-end 0)))
-    (when (looking-at "\\(?:[=-]>\\|[→⇢⇒]\\)+"); continual arrows: -> =>
+    (when (looking-at (concat smart-mode-selection-arrows-nocapture "+")); continual arrows: -> =>
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid selection")
       (setq step (goto-char (match-end 0))))
     (unless face
@@ -1890,7 +1905,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       ;;
       ;; looking at selection call names
       (and
-       (looking-at "[=-]>\\|[→⇢⇒]") ; $(foo->... $(foo=>...
+       (looking-at smart-mode-selection-arrows) ; $(foo->... $(foo=>...
        (smart-mode-scan-sel end face)
        (setq step (point)))
       ;;
@@ -2197,7 +2212,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
        (setq step (goto-char (match-end 0))))
       ;; User expressions: user->xxx +=
-      ((looking-at (concat "\\(user\\)\\(?:[=-]>\\|[→⇢⇒]\\)")); user=>  user->
+      ((looking-at (concat "\\(user\\)" smart-mode-selection-arrows-nocapture)); user=>  user->
        ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid eval spec: %s" (match-string 0))
        (setq step (goto-char (match-end 0))))
@@ -2350,7 +2365,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; User expressions: user->xxx +=
-     ((looking-at (concat "\\(user\\)\\(?:\\([=-]>\\|[→⇢⇒]\\)\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
+     ((looking-at (concat "\\(user\\)\\(?:" smart-mode-selection-arrows-capture "\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
       ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
       (smart-mode-match-set-face-goto 1 'font-lock-keyword-face)
       (if (string-equal (match-string 2) "=>")
@@ -3386,6 +3401,21 @@ Returns `t' if there's a next dependency line, or nil."
         nil))
     (end-of-line)
     (smart-mode-update-mode-line (point))))
+
+(defun smart-mode-try-unicode-arrows ()
+  (interactive)
+  (cond
+   ((looking-back "[^-]-")
+    (delete-backward-char 1); delete dash '-'
+    (insert "→"))
+   ((looking-back "[^.]...")
+    (delete-backward-char 3); delete dots '...'
+    (insert "⇢"))
+   ((looking-back "[^=]=")
+    (delete-backward-char 1); delete '='
+    (insert (if nil "⇢" "⇒")))
+   ((insert ">")))
+  (smart-mode-update-mode-line (point)))
 
 (defun smart-mode-kill-line ()
   (interactive)
