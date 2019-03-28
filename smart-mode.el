@@ -762,6 +762,7 @@
     ;;(define-key map "\\"       'smart-mode-backslash) ;; \
 
     (define-key map ">" 'smart-mode-try-unicode-arrows)
+    (define-key map "." 'smart-mode-try-unicode-dots)
     
     map)
   "The keymap that is used in smart mode.")
@@ -3422,6 +3423,15 @@ Returns `t' if there's a next dependency line, or nil."
     (delete-backward-char 3); delete dots '...'
     (insert "⇢"))
    ((insert ">")))
+  (smart-mode-update-mode-line (point)))
+
+(defun smart-mode-try-unicode-dots ()
+  (interactive)
+  (cond
+   ((looking-back "\\.\\.")
+    (delete-backward-char 2); delete dots '..'
+    (insert "…"))
+   ((insert ".")))
   (smart-mode-update-mode-line (point)))
 
 (defun smart-mode-kill-line ()
