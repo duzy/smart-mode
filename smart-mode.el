@@ -41,7 +41,7 @@
    ("\\\\\n" (0 "."))))
 
 (defconst smart-mode-url-schemes
-  `("http" "https" "ftp" "mailto")
+  `("http" "https" "ws" "wss" "ftp" "sftp" "mailto")
   "List of url schemes.")
 (defconst smart-mode-url-schemes-regex
   (regexp-opt smart-mode-url-schemes 'words)
@@ -1119,12 +1119,12 @@
       ((looking-at "\\(::+\\)[ \t]*"); ::+
        (smart-mode-warning-region (1+ (match-beginning 1)) (match-end 1) "too many colons")
        (setq step (goto-char (1- (match-end 0))))
-       (when (smart-mode-scan-rule-colon begin end)
+       (when (smart-mode-scan-rule-colon-at begin end)
          (setq step end result t)))
       ;;
       ;; single-target rules
       ((looking-at "\\(:\\)[^:=]")
-       (when (smart-mode-scan-rule-colon begin end)
+       (when (smart-mode-scan-rule-colon-at begin end)
          (setq step end result t)))
       ;;
       ;; multiple-targets rules
@@ -1207,7 +1207,7 @@
     ;; scan target expressions after the first at `begin'
     (smart-mode-scan-list end 'smart-mode-call-rule-name-face ":"); target expressions
     (when (looking-at "\\(:\\)[^:=]"); the first colon ':'
-      (setq result (smart-mode-scan-rule-colon begin end)))))
+      (setq result (smart-mode-scan-rule-colon-at begin end)))))
 
 (defun smart-mode-scan-special-rule (end)
   (smart-mode-scan* special-rule
@@ -1237,7 +1237,7 @@
       (when (looking-at "\\(:\\)[^:=]")
         ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
         (unless (setq result (looking-at "[#\n]"))
-          (when (smart-mode-scan-rule-colon begin end)
+          (when (smart-mode-scan-rule-colon-at begin end)
             (setq step end result t)))))
     ;;(smart-mode-scan-trace-i (concat tag "#5") end)
     (unless result
@@ -1279,19 +1279,23 @@
         (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (special rule): %s" (match-string 2))
         (setq step (goto-char (match-end 0)))))))); defun
 
-(defun smart-mode-scan-rule-colon (begin end)
+(defun smart-mode-scan-rule-colon (end); region-specific
+  (smart-mode-scan-rule-colon-at nil end))
+(defun smart-mode-scan-rule-colon-at (begin end)
   (smart-mode-scan* rule-colon () (looking-at "\\(:\\)[^:=]")
-    (put-text-property begin (match-beginning 1) 'smart-semantic 'rule-targets)
+    (when begin
+      (put-text-property begin (match-beginning 1) 'smart-semantic 'rule-targets))
     (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'rule-colon)
     (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
     (setq step (goto-char (match-end 1))
           smart-mode-scan-dialect nil)
     ;;
     ;; rescan the first target as rule-name for the right color
-    (goto-char begin)
-    (if (not (looking-at "[ \t]*:")); not just a ':' at the beginning
-      (smart-mode-scan-expr end 'smart-mode-call-rule-name-face))
-    (goto-char step)
+    (when begin
+      (goto-char begin)
+      (if (not (looking-at "[ \t]*:")); not just a ':' at the beginning
+          (smart-mode-scan-expr end 'smart-mode-call-rule-name-face))
+      (goto-char step))
     ;;
     ;; scan the optional modifiers
     (and
