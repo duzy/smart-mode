@@ -3243,6 +3243,9 @@ Returns `t' if there's a next dependency line, or nil."
         (concat (if (looking-back "[^ \t]") " " "") "\\"
                 "\n\t" (smart-mode-next-recipe-indent dialect)))
        ((concat "\n\t" (smart-mode-next-recipe-indent 'builtin)))))
+     ((and (looking-back "\\]\\(?:[ \t]\\|\\\\\n\\)*")
+           (equal (get-text-property (1- (point)) 'smart-semantic) 'modifiers))
+      "\n\t")
      ((message "newline-m: #semantic(%s) #dialect(%s)" semantic dialect)
       "\n"))))
 
