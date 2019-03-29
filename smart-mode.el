@@ -190,7 +190,7 @@
   "Regex to match bash dialect builtin names.")
 (defconst smart-mode-bash-keywords
   '("function" "do" "while" "done" "for" "exec" "exit"
-    "case" "esac" "if" "then" "else" "fi")
+    "case" "esac" "in" "if" "then" "else" "fi")
   "Bash dialect keywords.")
 (defconst smart-mode-bash-keywords-regex
   (regexp-opt smart-mode-bash-keywords 'words)
@@ -2800,19 +2800,22 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (smart-mode-scan-recipe-bash end)
     (setq step end result t)))
 
-(defun smart-mode-scan-recipe-bash (end)
+(defun smart-mode-scan-recipe-bash (end &optional delim)
   (smart-mode-scan** recipe-bash
       ((headword) (face 'smart-mode-bash-command-name-face) (pos))
-      (if (looking-at "\n")
+      (if (looking-at (or delim "\n"))
           (prog1 nil (setq step end result t))
         t)
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
      ;;((and (looking-back "^") (looking-at "\t")); recipe tab prefix
      ((looking-at "^\t"); recipe tab prefix
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
-     ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+     ((looking-at "[ \t]+"); spaces - "\\(?:\\\\\n\\|[ \t]\\)+"
+      ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
       (setq step (goto-char (match-end 0))))
      ;; the @ prefix
      ((cond
@@ -2822,27 +2825,34 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        ((or (looking-at ";\\(?:\\\\\n\\|[ \t]\\)*\\(@\\)")
             (and (looking-back ";\\(?:\\\\\n\\|[ \t]\\)*")
                  (looking-at "\\(@\\)")))))
+      (smart-mode-scan-trace-i (concat tag "#1.3") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\n"); continual lines: \\\n
+      (smart-mode-scan-trace-i (concat tag "#1.4") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "&&"); scan the &&
+      ;;(smart-mode-scan-trace-i (concat tag "#1.5") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))
             face 'smart-mode-bash-command-name-face))
      ((looking-at "\\(\\\\\\|\\$\\)[$]"); bash variables: \$foobar $$foobar
+      ;;(smart-mode-scan-trace-i (concat tag "#1.6") end t)
       (put-text-property (match-beginning 1) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
       (setq step (goto-char (match-end 1)))
       (smart-mode-scan-bash-varef end)
       (setq step (point)))
      ((looking-at "/[^/$ \t\n]*")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.7") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "['\"]")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.8") end t)
       (smart-mode-scan-bash-string (match-string 0) end)
       (setq step (point)))
      ((looking-at "#")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.9") end t)
       (smart-mode-scan-comment end)
       (setq step (point)))
      ((looking-at "\\-")
@@ -2902,7 +2912,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (when (< lastpoint (point))
       (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-bash-string-face)))); defun
 
-(defun smart-mode-scan-bash-varef (end); variable references:  \$foobar $$foobar
+(defun smart-mode-scan-bash-varef (end); variable references:  \$foobar $$foobar \$(cmd ...)
   (smart-mode-scan* bash-varef
       ((lastpoint step) (pos))
       (looking-at "[$]");"\\(\\\\\\|\\$\\)\\([$]\\)"
@@ -2915,6 +2925,9 @@ delim. Escape characters and continual lines are processed. Using `recipe'
             result t))
      ((looking-at "{"); parameter substitution: ${...}
       (setq result (smart-mode-scan-bash-substitution end)
+            step (point)))
+     ((looking-at "("); sub-shell: $(...)
+      (setq result (smart-mode-scan-bash-subshell end)
             step (point)))
      ((looking-at ".")
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
@@ -2959,6 +2972,17 @@ delim. Escape characters and continual lines are processed. Using `recipe'
           (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-substitution-face)
           (setq step (goto-char (match-end 0)))))))
     t))
+
+(defun smart-mode-scan-bash-subshell (end)
+  (when (looking-at "(")
+    ;;(message "subshell: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
+    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+    (setq step (goto-char (match-end 0)))
+    (smart-mode-scan-recipe-bash end ")")
+    (when (looking-at ")"); Good!
+      ;;(message "subshell: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (setq step (goto-char (match-end 0))))))
 
 (defun smart-mode-scan-recipe-python (end)
   (smart-mode-scan* recipe-python
