@@ -943,12 +943,18 @@
     (unwind-protect 
         (progn
           ;;(smart-mode-scan-trace "region-specific#1: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
-          (while (and (< (point-min) (point))
-                      (equal (get-text-property (1- (point)) 'smart-semantic) semantic))
-            (backward-char))
-          (while (and (< end (point-max))
-                      (equal (get-text-property end 'smart-semantic) semantic))
-            (setq end (1+ end)))
+          (cond
+           ((equal semantic 'comment)
+            (setq end (line-end-position))
+            (beginning-of-line))
+           ((and (< (point-min) (point))
+                 (< end (point-max)))
+            (while (and (< (point-min) (point))
+                        (equal (get-text-property (1- (point)) 'smart-semantic) semantic))
+              (backward-char))
+            (while (and (< end (point-max))
+                        (equal (get-text-property end 'smart-semantic) semantic))
+              (setq end (1+ end)))))
           ;;(smart-mode-scan-trace "region-specific#2: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
           (smart-mode-scan-trace "region-specific: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
           (funcall scan end))
@@ -1721,6 +1727,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       ))))
 
 (defun smart-mode-scan-comment (end)
+  ;;(smart-mode-scan-trace-i "comment#" end t)
   (smart-mode-scan** comment
       ((begin) (lastpoint) (line (line-end-position)))
       (looking-at comment-start)
@@ -1730,7 +1737,9 @@ delim. Escape characters and continual lines are processed. Using `recipe'
           lastpoint begin
           end (max end line))
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (while (and (< step end) (< (point) end) (not result))
+    (while (and (< step end) (< (point) end)
+                (not (looking-at (concat comment-end "\n"))))
+      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
       (cond
        ((looking-at "\\\\\\n")
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-slash-face)
@@ -1747,12 +1756,12 @@ delim. Escape characters and continual lines are processed. Using `recipe'
         (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-comment-url-scheme-face)
         (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-comment-url-face)
         (setq lastpoint (match-end 3) step (goto-char (match-end 3))))
-       ((looking-at (concat comment-end "\n"))
-        (setq step (goto-char (match-end 0))
-              result t))
        ((setq step (goto-char (1+ (point)))))))
     (when (< lastpoint (point))
       (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-comment-face))
+    (when (looking-at (concat comment-end "\n"))
+      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+      (setq step (goto-char (match-end 0)) result t))
     (put-text-property (1- (point)) (point) 'syntax-table (string-to-syntax ">"))
     (put-text-property begin (point) 'smart-semantic 'comment)))
 
