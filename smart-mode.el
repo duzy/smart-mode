@@ -1330,12 +1330,14 @@
      (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)")
        ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
-       (setq step (goto-char (match-end 0)))))
+       (setq step (goto-char (match-end 0))
+             begin step)))
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
         (setq step (goto-char (match-end 0))))
     ;; scan the optional dependencies
     (when (looking-at "[^;#\n]")
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
+      (put-text-property begin (point) 'smart-semantic 'dependencies)
       (if (smart-mode-scan-dependencies end)
           (progn
             ;;(smart-mode-scan-trace-i (concat tag "#4.1") end t)
@@ -1425,7 +1427,7 @@
       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\]\\)")
        ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
        (goto-char (match-end 1)))
-      ((looking-back "\\(\\]\\)\\(?:\\\\\n\\|[ \t]\\)*")
+      ((looking-back "\\(\\]\\)"); \\(?:\\\\\n\\|[ \t]\\)*
        ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
        (goto-char (match-end 0)))
       ((smart-mode-scan-trace-i (concat tag "#2.3") end t)))
@@ -1559,6 +1561,10 @@
       (setq step (point))))))
 
 (defun smart-mode-scan-dependencies (end)
+  (while (and (< end (point-max))
+              (let ((sema (get-text-property end 'smart-semantic)))
+                (or (equal sema 'dependencies))))
+    (setq end (1+ end)))
   (smart-mode-scan* dependencies
       ((begin step) (pos))
       (looking-at "[^;#\n]"); ended by ';' '#' '\n'
@@ -1754,14 +1760,14 @@ delim. Escape characters and continual lines are processed. Using `recipe'
   (smart-mode-scan* escape ((begin step)) (looking-at "\\\\")
     (setq step (goto-char (match-end 0)))
     (cond
-     ((and (< step end) (looking-at "\n"))
+     ((looking-at "\n"); (and (< step end) ...
       (put-text-property begin (match-end 0) 'font-lock-face 'smart-mode-continual-slash-face)
       (setq step (goto-char (match-end 0)) result t))
-     ((and (< step end) (looking-at smart-mode-esc-chars-regex))
+     ((looking-at smart-mode-esc-chars-regex); (and (< step end) ...
       (put-text-property begin (match-end 0) 'font-lock-face 'smart-mode-escape-slash-face)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-escape-char-face)
       (setq step (goto-char (match-end 0)) result t))
-     ((and (< step end) (looking-at "[ \t#]"))
+     ((looking-at "[ \t#]"); (and (< step end) ...
       (smart-mode-warning-region begin (match-end 0) "invalid escape: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))))); defun
 
@@ -3213,6 +3219,8 @@ Returns `t' if there's a next dependency line, or nil."
      ((string= semantic 'dependencies)
       (message "newline-m: #dependencies #dialect(%s)" dialect)
       (cond
+       ((looking-back "\\\\$"); newline right after the continual character (aka. '\').
+        (concat "\n" (make-string 4 ?\s) " \\"))
        ((looking-at "$") "\n\t")
        ((concat (if (looking-back "[^ \t]") " " "") "\\\n" (make-string 4 ?\s)))))
      ((string= semantic 'recipe)
