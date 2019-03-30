@@ -892,6 +892,12 @@
                (dialect) (scan) (tag "region"))
            (when (and semantic (not dialect))
              (cond
+              ;; ((equal semantic 'recipe-prefix)
+              ;;  (setq semantic 'recipe
+              ;;        dialect (or (get-text-property beg 'smart-dialect)
+              ;;                    (get-text-property (point) 'smart-dialect)
+              ;;                    (get-text-property (1+ beg) 'smart-dialect)
+              ;;                    (get-text-property end 'smart-dialect))))
               ((equal semantic 'recipe)
                (setq dialect (or (get-text-property beg 'smart-dialect)
                                  (get-text-property (point) 'smart-dialect)
@@ -899,7 +905,6 @@
                                  (get-text-property end 'smart-dialect))))))
            ;;(smart-mode-scan-trace "region: #semantic(%s) #dialect(%s) [%s,%s) [%s,%s)" semantic dialect smart-mode-scan-beg smart-mode-scan-end beg end)
            (goto-char beg)
-
            (cond
             ;; While editing a comment region.
             ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(#\\)")
@@ -939,24 +944,48 @@
            (cons beg end)))))))
 
 (defun smart-mode-scan-region-specific (end name semantic)
+  (cond
+   ;;((looking-at ))
+   ((equal semantic 'comment)
+    (setq end (line-end-position))
+    (beginning-of-line))
+   ((and (or (equal semantic 'modifiers) (equal semantic 'modifier))
+         (< (point-min) (point)) (< end (point-max)))
+    ;;(message "scan-region-specific#modifiers#0:[%s,%s) %s" (point) end (buffer-substring (point) end))
+    (while (and (< end (point-max))
+                (let ((sema (get-text-property end 'smart-semantic)))
+                  (or (equal sema 'modifiers)
+                      (equal sema 'modifier))))
+      (setq end (1+ end)))
+    ;;(message "scan-region-specific#modifiers#1:[%s,%s) %s" (point) end (buffer-substring (point) end))
+    (while (and (< (point-min) (point))
+                (let ((sema (get-text-property (1- (point)) 'smart-semantic)))
+                  (or (equal sema 'modifiers)
+                      (equal sema 'modifier)
+                      (looking-back smart-mode-space-regex))))
+      (backward-char))
+    ;;(message "scan-region-specific#modifiers#2: [%s,%s) %s" (point) end (buffer-substring (point) end))
+    (setq semantic 'modifiers name (format "%s" semantic)))
+   ((and (< (point-min) (point)) (< end (point-max)))
+    ;;(message "scan-region-specific#%s#0:[%s,%s) %s" semantic (point) end (buffer-substring (point) end))
+    (while (and (< end (point-max))
+                (let ((sema (get-text-property end 'smart-semantic)))
+                  (or (equal sema semantic)
+                      )))
+      (setq end (1+ end)))
+    ;;(message "scan-region-specific#%s#1:[%s,%s) %s" semantic (point) end (buffer-substring (point) end))
+    (while (and (< (point-min) (point))
+                (let ((sema (get-text-property (1- (point)) 'smart-semantic)))
+                  (or (equal sema semantic)
+                      (looking-back smart-mode-space-regex))))
+      (backward-char))
+    ;;(message "scan-region-specific#%s#2: [%s,%s) %s" semantic (point) end (buffer-substring (point) end))
+    ))
   (when (functionp (setq scan (intern-soft (format "smart-mode-scan-%s" name))))
     (unwind-protect 
         (progn
-          ;;(smart-mode-scan-trace "region-specific#1: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
-          (cond
-           ((equal semantic 'comment)
-            (setq end (line-end-position))
-            (beginning-of-line))
-           ((and (< (point-min) (point))
-                 (< end (point-max)))
-            (while (and (< (point-min) (point))
-                        (equal (get-text-property (1- (point)) 'smart-semantic) semantic))
-              (backward-char))
-            (while (and (< end (point-max))
-                        (equal (get-text-property end 'smart-semantic) semantic))
-              (setq end (1+ end)))))
-          ;;(smart-mode-scan-trace "region-specific#2: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
-          (smart-mode-scan-trace "region-specific: %s: [%s,%s) %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
+          ;;(smart-mode-scan-trace "region-specific#%s#[%s,%s): %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
+          (smart-mode-scan-trace "region-specific#%s#[%s,%s): %s" name (point) end (buffer-substring (point) end))
           (funcall scan end))
       (when (< (point) end)
         (smart-mode-warning-region (point) end "unscanned %s specific region" name)
@@ -1399,6 +1428,7 @@
       (setq step (goto-char (match-end 0))))))
 
 (defun smart-mode-scan-modifiers (end)
+  ;;(smart-mode-scan-trace-i "modifiers#" end t)
   (while (and (< end (point-max))
               (let ((sema (get-text-property end 'smart-semantic)))
                 (or (equal sema 'rule-colon)
@@ -1443,24 +1473,27 @@
 (defun smart-mode-scan-modifier-list (end)
   (smart-mode-scan** modifier-list
       ((lastpoint (point))) (looking-at "[^\n]"); until the end of line
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+    (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     (cond
-      ((looking-at "|"); the modifier bar
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-bar-face)
-       (setq step (goto-char (match-end 0))))
-      ((looking-at "\\]")
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
-       (put-text-property lastpoint (match-end 0) 'smart-semantic 'modifiers)
-       (setq step end result t))
-      ((looking-at "((")
-       (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
-       (if (smart-mode-scan-parameters end)
-           (setq lastpoint (point))))
-      ((looking-at "([^(]")
-       (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
-       (if (smart-mode-scan-modifier end)
-           (setq lastpoint (point)))))))
+     ((looking-at "\\(\\\\\\)\n"); continual lines
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "|"); the modifier bar
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-bar-face)
+      (setq step (goto-char (match-end 0))))
+     ((looking-at "\\]")
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
+      (put-text-property lastpoint (match-end 0) 'smart-semantic 'modifiers)
+      (setq step end result t))
+     ((looking-at "((")
+      (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
+      (if (smart-mode-scan-parameters end)
+          (setq lastpoint (point))))
+     ((looking-at "([^(]")
+      (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
+      (if (smart-mode-scan-modifier end)
+          (setq lastpoint (point)))))))
 
 (defun smart-mode-scan-parameters (end)
   (smart-mode-scan* parameters
@@ -1485,7 +1518,7 @@
 
 (defun smart-mode-scan-parameter-list (end)
   (smart-mode-scan** parameter-list () (looking-at "[^\n]")
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+    (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at "))")
@@ -1512,17 +1545,21 @@
         (setq step (point)))))))
 
 (defun smart-mode-scan-modifier (end)
+  ;;(smart-mode-scan-trace-i "modifier#" end t)
   (smart-mode-scan* modifier
       ((begin) (name) (face 'smart-mode-no-face))
-      (looking-at "(")
+      (looking-at "\\(?:\\\\\n\\|[ \t]\\)*(")
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
     (setq step (goto-char (match-end 0))
           begin (match-beginning 0))
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+    (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     ;;
     ;; looking at modifier name, dialect, etc., but not scanned
     (cond
+     ;; ((looking-at "\\(\\\\\\)\n"); continual lines
+     ;;  (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+     ;;  (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-modifiers-regex)
       ;;(smart-mode-scan-trace-o (concat tag "#2.1") (match-string 0) end t)
       (setq name (match-string 1)
@@ -1559,57 +1596,59 @@
 
 (defun smart-mode-scan-modifier-arguments (end)
   (smart-mode-scan** modifier-arguments () (looking-at "[^\n]")
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+    (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at ")") (setq step end result t))
+     ((looking-at "\\(\\\\\\)\n"); continual lines
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end 'smart-mode-modifier-argument-face)
       (setq step (point))))))
 
 (defun smart-mode-scan-dependencies (end)
+  ;;(smart-mode-scan-trace-i "dependencies#" end t)
   (while (and (< end (point-max))
-              (let ((sema (get-text-property end 'smart-semantic)))
+              (let ((sema (get-text-property end 'smart-semantic)) (dialect))
                 (or (equal sema 'dependencies))))
     (setq end (1+ end)))
   (smart-mode-scan* dependencies
       ((begin step) (pos))
       (looking-at "[^;#\n]"); ended by ';' '#' '\n'
-    ;;(smart-mode-scan-trace-i (concat tag "#1") end)
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (setq dialect (or smart-mode-scan-dialect
+                      (get-text-property (point) 'smart-dialect)))
     (smart-mode-scan-dependency-list end)
-    ;;(smart-mode-scan-trace-i (concat tag "#2") end)
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at "\n")
-      ;;(smart-mode-scan-trace-i (concat tag "#3") end)
+      ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
       (put-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+      (put-text-property begin (match-end 0) 'smart-dialect dialect)
+      (when (and (looking-at "\n\\(\t\\)\\(\n\\)") (<= (match-end 0) end))
+        ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
+        (put-text-property (match-beginning 1) (match-end 2) 'smart-dialect dialect)
+        (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
+        (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face))
       (setq step end result t))
      ((looking-at "[;#]"); the ';' recipe or '#' comment
-      ;;(smart-mode-scan-trace-i (concat tag "#4") end)
+      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
       (put-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+      (put-text-property begin (match-end 0) 'smart-dialect dialect)
       (setq step end result t))
      ((setq pos (line-end-position))
-      ;;(smart-mode-scan-trace-i (concat tag "#5") end)
+      ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
       (smart-mode-warning-region (point) pos "unexpected end of dependencies: %s" (buffer-substring (point) pos))
       (setq step (goto-char pos))))))
 
 (defun smart-mode-scan-dependency-list (end)
   (smart-mode-scan** dependency-list () (looking-at "[^;#\n]")
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+    (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     ;; (smart-mode-scan-trace-i (concat tag "#1") end)
-    ;; (cond
-    ;;  ((looking-at "\\(\\\\\\)\n") ; continual lines
-    ;;   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
-    ;;   (setq step (goto-char (match-end 0)))
-    ;;   (if (< end (setq pos (line-end-position)))
-    ;;       (setq end pos)))
-    ;;  ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-    ;;   (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (dependencies): %s" (match-string 2))
-    ;;   (setq step (goto-char (match-end 0))))
-    ;;  ((smart-mode-scan-expr end 'smart-mode-dependency-face)
-    ;;   (setq step (point)))
-    ;;  ((setq step end)))
     (and
      ;;(smart-mode-scan-trace-i (concat tag "#1") end)
      (smart-mode-scan-list end 'smart-mode-dependency-face)
@@ -2375,6 +2414,22 @@ delim. Escape characters and continual lines are processed. Using `recipe'
       ;;(setq step end)
       nil)))); defun
 
+(defun smart-mode-scan-recipe-prefix (end); region-specific
+  ;;(smart-mode-scan-trace-i "recipe-prefix#" end t)
+  (smart-mode-scan* recipe-prefix
+      ((begin (point)))
+      (looking-at "^\t") ;(< step end); reset end
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (setq smart-mode-scan-dialect (get-text-property (point) 'smart-dialect))
+    (smart-mode-scan-recipe end (smart-mode-select-dialect-scanner))
+    (when (looking-at "^\t")
+      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+      ;; Fix font face of the next recipe prefix.
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      t)
+    ;;(put-text-property begin end 'smart-message nil)
+    (setq step end result t)))
+
 (defun smart-mode-scan-recipe (end &optional scan semi)
   (smart-mode-scan* recipe
       ((begin (point)) (dialect smart-mode-scan-dialect))
@@ -2391,6 +2446,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
        ;; tabby recipe (list)
        ((looking-at "^\t")))
     (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
+    (put-text-property (match-beginning 0) (match-end 0) 'smart-dialect dialect)
     (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
     (setq step (goto-char (match-end 0)); '^\t' or ';'
           begin step)
@@ -2398,9 +2454,9 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (when (and scan (functionp scan))
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
       (unless (funcall scan end)
-        (smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
+        ;;(smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
       (when (looking-at "[^\n]+"); unscanned recipe text
-        ;;(smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
+        (smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
         (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" dialect (match-string 0))
         (goto-char (match-end 0)))
       (setq step (point))); unwind-protect 
@@ -3236,19 +3292,32 @@ Returns `t' if there's a next dependency line, or nil."
 
 (defun smart-mode-newline-m ()
   (interactive)
-  (let ((str (smart-mode-newline-string)))
+  (let* ((semantic (get-text-property (point) 'smart-semantic))
+         (str (smart-mode-newline-string semantic)) (begin (point)))
     (when (and str (not (string= str "")))
       (insert str); insert the string of 'newline'
+      ;;(put-text-property begin (point) 'smart-semantic 'project-options)
       (cond; go backward at the right point for quick editing
        ((string-suffix-p " \\" str) (backward-char 2))
        ((string-suffix-p "\\" str) (backward-char 1))))))
 
-(defun smart-mode-newline-string ()
-  (let ((semantic (get-text-property (point) 'smart-semantic))
+(defun smart-mode-newline-string (semantic)
+  (let (;;(semantic (get-text-property (point) 'smart-semantic))
         (dialect (get-text-property (point) 'smart-dialect)))
     (cond
      ((string= semantic 'modifiers)
       (message "newline-m: #modifiers #dialect(%s)" dialect)
+      (cond 
+       ((looking-at "[ \t]+")
+        (let ((smart-mode-inhibit-fontification t))
+          (delete-region (match-beginning 0) (match-end 0)))))
+      (concat (if (looking-back "[^ \t]") " " "") "\\\n" (make-string 4 ?\s)))
+     ((string= semantic 'modifier)
+      (message "newline-m: #modifier #dialect(%s)" dialect)
+      (cond 
+       ((looking-at "[ \t]+")
+        (let ((smart-mode-inhibit-fontification t))
+          (delete-region (match-beginning 0) (match-end 0)))))
       (concat (if (looking-back "[^ \t]") " " "") "\\\n" (make-string 4 ?\s)))
      ((string= semantic 'dependencies)
       (message "newline-m: #dependencies #dialect(%s)" dialect)
