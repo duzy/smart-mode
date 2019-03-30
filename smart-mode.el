@@ -987,9 +987,16 @@
           ;;(smart-mode-scan-trace "region-specific#%s#[%s,%s): %s" name (point) end (buffer-substring (point) (min (line-end-position) end)))
           (smart-mode-scan-trace "region-specific#%s#[%s,%s): %s" name (point) end (buffer-substring (point) end))
           (funcall scan end))
-      (when (< (point) end)
-        (smart-mode-warning-region (point) end "unscanned %s specific region" name)
-        (goto-char end)))
+      (smart-mode-scan-trace "region-specific#%s#[%s,%s): %s" semantic (point) end (buffer-substring (point) end))
+      (cond
+       ((and (equal semantic 'dependencies)
+             (looking-at "\n\t\n")); empty recipe right after dependencies
+        (goto-char end))
+       ((equal semantic 'recipe-prefix))
+       ((equal semantic 'recipe))
+       ((< (point) end)
+        (smart-mode-warning-region (point) end "~unscanned %s specific region" name)
+        (goto-char end))))
     t))
 
 ;;(defun smart-mode-set-face (beg end face)
@@ -2454,7 +2461,7 @@ delim. Escape characters and continual lines are processed. Using `recipe'
     (when (and scan (functionp scan))
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
       (unless (funcall scan end)
-        ;;(smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
+        (smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
       (when (looking-at "[^\n]+"); unscanned recipe text
         (smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
         (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" dialect (match-string 0))
