@@ -3952,6 +3952,13 @@ Returns `t' if there's a next dependency line, or nil."
   (smart-mode-set-indent-defaults)
   (smart-mode-setup-comment-handling)
 
+  (set (make-local-variable 'compile-command)
+       ;; (concat "make -k "
+       ;;         (if buffer-file-name
+       ;;  	   (shell-quote-argument
+       ;;  	    (file-name-sans-extension buffer-file-name))))
+       "smart")
+
   ;;(setq-local syntax-propertize-function
   ;;            smart-mode-syntax-propertize-function)
   
