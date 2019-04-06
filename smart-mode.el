@@ -1055,7 +1055,7 @@
         (cond
          ((looking-at "\\(project\\)[ \t#\n]")
           (smart-mode-scan-project end))
-         ((looking-at smart-mode-statements-regex)
+         ((looking-at (concat smart-mode-statements-regex "\\s-"))
           (smart-mode-scan-statement end))
          ((looking-at "\\(:\\)[^:=]")
           (smart-mode-scan-special-rule end))
