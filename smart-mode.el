@@ -147,6 +147,14 @@
   (concat "\\-" (regexp-opt smart-mode-special-rule-user-options 'words))
   "Regex to match special rule :user: options.")
 
+
+(defconst smart-mode-special-modifier-names
+  `("case" "cond")
+  "List of names understood by smart as modifiers.")
+(defconst smart-mode-special-modifiers-regex
+  (regexp-opt smart-mode-special-modifier-names 'words)
+  "Regex to match valid modifiers.")
+
 (defconst smart-mode-modifier-names
   `("unclose" "cd" "env" "var" "set" "eval" "value"
     "compare" "stdout" "stderr" "stdin" "sudo"
@@ -154,7 +162,7 @@
     "configure" "configure-file" "extract-configuration"
     "grep-compare" "grep-files" "grep-dependencies"
     "parallel" ;;"plain" "dock"
-    )
+    ,@smart-mode-special-modifier-names)
   "List of names understood by smart as modifiers.")
 (defconst smart-mode-modifiers-regex
   (regexp-opt smart-mode-modifier-names 'words)
@@ -486,6 +494,12 @@
 (defface smart-mode-modifier-name-face
   '((t :inherit font-lock-builtin-face))
   "Face to used to highlight names of modifier names."
+  :group 'smart)
+
+(defface smart-mode-modifier-special-name-face
+  ;;'((t :inherit font-lock-builtin-face :weight bold))
+  '((t :inherit font-lock-keyword-face))
+  "Face to used to highlight special names of modifier names."
   :group 'smart)
 
 (defface smart-mode-modifier-argument-face
@@ -1569,8 +1583,11 @@
      ;;  (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-modifiers-regex)
       ;;(smart-mode-scan-trace-o (concat tag "#2.1") (match-string 0) end t)
-      (setq name (match-string 1)
-            face 'smart-mode-modifier-name-face))
+      (setq name (match-string 1))
+      (cond
+       ((string-match-p smart-mode-special-modifiers-regex name)
+        (setq face 'smart-mode-modifier-special-name-face))
+       ((setq face 'smart-mode-modifier-name-face))))
      ((looking-at smart-mode-dialect-interpreters-regex)
       ;;(smart-mode-scan-trace-o (concat tag "#2.2") (match-string 1) end t)
       (setq name (match-string 1)
