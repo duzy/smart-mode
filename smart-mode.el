@@ -120,10 +120,38 @@
   "Regex to match support project options.")
 
 (defconst smart-mode-import-options
-  `("reusing")
+  `("cond" "reusing")
   "List of supported import options.")
 (defconst smart-mode-import-option-regex
   (concat "\\(\\-\\)" (regexp-opt smart-mode-import-options 'words))
+  "Regex to match support project options.")
+
+(defconst smart-mode-include-options
+  `("cond")
+  "List of supported include options.")
+(defconst smart-mode-include-option-regex
+  (concat "\\(\\-\\)" (regexp-opt smart-mode-include-options 'words))
+  "Regex to match support project options.")
+
+(defconst smart-mode-files-options
+  `("cond")
+  "List of supported files options.")
+(defconst smart-mode-files-option-regex
+  (concat "\\(\\-\\)" (regexp-opt smart-mode-files-options 'words))
+  "Regex to match support project options.")
+
+(defconst smart-mode-eval-options
+  `("cond")
+  "List of supported eval options.")
+(defconst smart-mode-eval-option-regex
+  (concat "\\(\\-\\)" (regexp-opt smart-mode-eval-options 'words))
+  "Regex to match support project options.")
+
+(defconst smart-mode-use-options
+  `("cond")
+  "List of supported use options.")
+(defconst smart-mode-use-option-regex
+  (concat "\\(\\-\\)" (regexp-opt smart-mode-use-options 'words))
   "Regex to match support project options.")
 
 (defconst smart-mode-special-var-names ; $:xxx:
