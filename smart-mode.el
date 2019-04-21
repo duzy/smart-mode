@@ -263,7 +263,7 @@
   (regexp-opt smart-mode-c++-types 'words)
   "Regex to match c++ dialect builtin names.")
 (defconst smart-mode-c++-preprocessors
-  '("define" "error" "endif" "if" "ifdef" "ifndef"
+  '("define" "error" "endif" "if" "ifdef" "ifndef" "line"
     "include" "pragma" "undef")
   "C++ dialect preprocessor names.")
 (defconst smart-mode-c++-preprocessors-regex
