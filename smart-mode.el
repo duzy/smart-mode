@@ -186,7 +186,8 @@
 (defconst smart-mode-modifier-names
   `("unclose" "cd" "env" "var" "set" "eval" "value"
     "compare" "stdout" "stderr" "stdin" "sudo"
-    "update-file" "check" "check-file" "check-dir" 
+    "update-file" "copy-file" "write-file"
+    "check" "check-file" "check-dir" 
     "configure" "configure-file" "extract-configuration"
     "grep-compare" "grep-files" "grep-dependencies"
     "parallel" ;;"plain" "dock"
