@@ -2492,8 +2492,13 @@
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-builtin-face)
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-builtin-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
+     ;;
+     ;; Unknown commands
+     ((looking-at smart-mode-bareword-regex)
+      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
+      (setq step (goto-char (match-end 0)) kind 'unknown))
      ;;
      ;; User expressions: user->xxx +=
      ((looking-at (concat "\\(user\\)\\(?:" smart-mode-selection-arrows-capture "\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
@@ -2508,7 +2513,7 @@
       (setq step (point) kind 'assign))
      ;;
      ;; Value expressions.
-     ((and (setq pos (point)) (smart-mode-scan-expr end))
+     ((and (setq pos (point)) (smart-mode-scan-expr end 'smart-mode-no-face))
       ;;(smart-mode-scan-trace-o (concat tag "#2.3") (buffer-substring pos (point)) end t)
       (setq step (point) kind 'value))
      ;; Invalid command expresions
@@ -2516,6 +2521,7 @@
       ;;(smart-mode-scan-trace-i (concat tag "#2.4") end t)
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); cond
+    ;; skip spaces
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
         (setq step (goto-char (match-end 0))))
     ;; arguments
