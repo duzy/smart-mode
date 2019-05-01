@@ -326,6 +326,8 @@
   (regexp-opt smart-mode-esc-chars 'words)
   "Regex to match escapable chars.")
 
+(defconst smart-mode-font-lock-keywords '(smart-mode-font-lock-highlight))
+
 (defconst smart-mode-scan-combine-delim
   "[ \t\n,#=:|(){}]\\|\\]\\|\\["
   "Delimiters to prevent scan combination in smart editing mode.")
@@ -341,8 +343,6 @@
 (defconst smart-mode-selection-arrows-nocapture
   (concat "\\(?:" smart-mode-selection-arrows "\\)")
   "Selection arrow operators.")
-
-(defconst smart-mode-font-lock-defaults '(smart-mode-font-lock))
 
 ;;---- CUSTOMS -----------------------------------------------------------
 
@@ -463,8 +463,7 @@
 
 (defface smart-mode-assign-face ; = := ::= != ?= += =+ -= -+= -=+
   '((t :inherit font-lock-constant-face :weight bold
-       ;;:background  "LightBlue1"
-       ))
+       :background  "LightBlue1"))
   "Face to used to highlight assignment signs."
   :group 'smart)
 
@@ -724,33 +723,27 @@
   :group 'smart)
 
 (defun smart-mode-set-font-lock-defaults ()
-  ;;(setq-local font-lock-defaults `(smart-mode-font-lock-defaults t))
-  ;;(setq-local font-lock-unfontify-region-function 'smart-mode-unfontify-region)
-  ;;(setq-local font-lock-extend-region-functions '(smart-mode-extend-region))
-  ;;(setq-local font-lock-support-mode nil) ;; avoid any conflicts  
-  (setq-local font-lock-defaults `(smart-mode-font-lock-defaults
-
-                                   ;; also enable the default
-                                   ;; `font-lock-keywords', which
-                                   ;; do further highlighting
-                                   ;; according to the syntax table
-                                   ;; `smart-mode-syntax-table'
-                                   ;;,@(cdr font-lock-defaults)
-
-                                   ;; ending with t to prevent
-                                   ;; `font-lock-defaults'.
-                                   t)))
+  (setq-local font-lock-defaults `(smart-mode-font-lock-keywords t))
+  (setq-local font-lock-unfontify-region-function 'smart-mode-unfontify-region)
+  (setq-local font-lock-extend-region-functions '(smart-mode-extend-region))
+  (setq-local font-lock-support-mode nil) ;; avoid any conflicts
+  )
 
 ;;---- VARS --------------------------------------------------------------
 
 ;; The `font-lock-beg' and `font-lock-end' is actually private to
 ;; font-lock.el (see `font-lock-default-fontify-region' for details).
-;;(defvar font-lock-beg)
-;;(defvar font-lock-end)
+(defvar font-lock-beg)
+(defvar font-lock-end)
 ;;(make-variable-buffer-local 'font-lock-beg)
 ;;(make-variable-buffer-local 'font-lock-end)
 
+(defvar smart-mode-scan-beg nil)
+(defvar smart-mode-scan-end nil)
+
 (defvar-local smart-mode-inhibit-fontification nil)
+(defvar-local smart-mode-change-beg nil)
+(defvar-local smart-mode-change-end nil)
 
 (defvar-local smart-recipe-overlays nil
   "The smart-mode recipe overlays used in the current buffer.")
@@ -926,6 +919,73 @@
     (smart-mode-warning-region beg end "%s: %s" tag s)
     end))
 
+(defun smart-mode-scan-region (beg end)
+  "Identify syntactic tokens/symbols (strings/comments/keywords, etc.)."
+  ;;(smart-mode-message "scan-region: beg(%d) end(%d)" beg end)
+  (smart-mode-with-silent-modifications
+   (save-excursion
+     (save-restriction
+       (save-match-data
+         (let ((inhibit-point-motion-hooks t); prevent point motion hooks
+               (inhibit-quit t); prevent quit emacs while scanning
+               (semantic (or (get-text-property beg 'smart-semantic)
+                             (get-text-property (point) 'smart-semantic)
+                             (get-text-property (1+ beg) 'smart-semantic)
+                             ))
+               (dialect) (scan) (tag "region"))
+           (when (and semantic (not dialect))
+             (cond
+              ;; ((equal semantic 'recipe-prefix)
+              ;;  (setq semantic 'recipe
+              ;;        dialect (or (get-text-property beg 'smart-dialect)
+              ;;                    (get-text-property (point) 'smart-dialect)
+              ;;                    (get-text-property (1+ beg) 'smart-dialect)
+              ;;                    (get-text-property end 'smart-dialect))))
+              ((equal semantic 'recipe)
+               (setq dialect (or (get-text-property beg 'smart-dialect)
+                                 (get-text-property (point) 'smart-dialect)
+                                 (get-text-property (1+ beg) 'smart-dialect)
+                                 (get-text-property end 'smart-dialect))))))
+           ;;(smart-mode-scan-trace "region: #semantic(%s) #dialect(%s) [%s,%s) [%s,%s)" semantic dialect smart-mode-scan-beg smart-mode-scan-end beg end)
+           (goto-char beg)
+           (cond
+            ;; While editing a comment region.
+            ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(#\\)")
+             (goto-char (match-beginning 1))
+             (smart-mode-scan-comment end))
+            ;;((setq end (smart-mode-beginning-of-line)))
+            ); cond
+
+           (cond
+            ((<= end (point))); does nothing if all scanned
+            ((and smart-mode-scan-beg (equal smart-mode-scan-beg beg)
+                  smart-mode-scan-end (equal smart-mode-scan-end end))
+             (smart-mode-scan-trace "region#0: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end))))
+            ((and semantic dialect); dialect specific scanners
+             (if (smart-mode-scan-region-specific end (format "%s-%s" semantic dialect) semantic)
+                 (progn
+                   ;;(smart-mode-scan-trace "region#1: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end)))
+                   ;;(put-text-property beg end 'smart-semantic semantic)
+                   ;;(put-text-property beg end 'smart-dialect dialect)
+                   t)
+               (smart-mode-scan-trace "region#1.1: #%s(%s) [%s,%s) %s" semantic dialect (point) end (buffer-substring (point) (min (line-end-position) end)))))
+            ((and semantic); semantic specific scanners
+             (if (smart-mode-scan-region-specific end (format "%s" semantic) semantic)
+                 (progn
+                   ;;(smart-mode-scan-trace "region#2: #%s [%s,%s) %s" semantic (point) end (buffer-substring (point) (min (line-end-position) end)))
+                   ;;(put-text-property beg end 'smart-semantic semantic)
+                   t)
+               (smart-mode-scan-trace "region#2.1: #%s [%s,%s) %s" semantic (point) end (buffer-substring (point) (min (line-end-position) end)))))
+            ((smart-mode-scan end)))
+
+           (setq smart-mode-scan-beg beg
+                 smart-mode-scan-beg end)
+
+           (smart-mode-scan-trace-i (concat tag "##") end)
+
+           ;; Returns the cons (beg . end)
+           (cons beg end)))))))
+
 (defun smart-mode-scan-region-specific (end name semantic)
   (cond
    ;;((looking-at ))
@@ -981,6 +1041,9 @@
         (smart-mode-warning-region (point) end "~unscanned %s specific region" name)
         (goto-char end))))
     t))
+
+;;(defun smart-mode-set-face (beg end face)
+;;  (if (and beg end face) (put-text-property beg end 'font-lock-face face)))
 
 (defun smart-mode-match-set-face-goto (n face)
   (let ((a (match-beginning n)) (b (match-end n)))
@@ -3658,6 +3721,34 @@ Returns `t' if there's a next dependency line, or nil."
 ;;   (interactive)
 ;;   (smart-mode-scan-region (point-min) (point-max)))
 
+(defun smart-mode-extend-region ()
+  ;;(smart-mode-message "extend-region: fl-beg(%S) fl-end(%S)" font-lock-beg font-lock-end)
+  (unless smart-mode-inhibit-fontification
+    (when (or (null smart-mode-change-beg) (< font-lock-beg smart-mode-change-beg))
+      (setq smart-mode-change-beg font-lock-beg))
+    (when (or (null smart-mode-change-end) (> font-lock-end smart-mode-change-end))
+      (setq smart-mode-change-end font-lock-end))
+    ;;(smart-mode-message "extend-region: (%s)"
+    ;;                          (buffer-substring smart-mode-change-beg smart-mode-change-end))
+    (let ((region (smart-mode-propertize smart-mode-change-beg smart-mode-change-end)))
+      (when region
+        ;;(smart-mode-message "extend-region: propertized(%S)" region)
+        ;;(setq font-lock-beg (car region)
+        ;;      font-lock-end (cdr region))
+        ))))
+
+(defun smart-mode-propertize (&optional beg end)
+  (unless beg (setq beg smart-mode-change-beg))
+  (unless end (setq end smart-mode-change-end))
+  (setq smart-mode-change-beg nil smart-mode-change-end nil)
+  ;;(smart-mode-message "propertize: beg(%S) end(%S)" beg end)
+  (if (and end (> end (point-max))) (setq end (point-max)))
+  (cond ((or (null beg) (null end)) nil)
+        ((< beg end) (smart-mode-invalidate-region beg end))))
+
+(defun smart-mode-invalidate-region (beg end)
+  (if (< beg end) (smart-mode-scan-region beg end)))
+
 ;; The `smart-mode-unfontify-region' is called each time the buffer
 ;; is extended (after `smart-mode-extend-region'). We just ignore it
 ;; and do nothing. See `font-lock-unfontify-region'.
@@ -3859,7 +3950,7 @@ Returns `t' if there's a next dependency line, or nil."
 
 ;;---- Comments ----------------------------------------------------------
 
-(defun smart-mode-set-comment-handling ()
+(defun smart-mode-setup-comment-handling ()
   "Setup comment handling, see `newcomment.el'."
   (interactive)  
   (setq-local comment-use-syntax nil)
@@ -3896,14 +3987,16 @@ Returns `t' if there's a next dependency line, or nil."
 ;; Note that `autoload' is required to activate `smart-mode-map'.
 ;;;###autoload
 (define-derived-mode smart-mode smart-mode-base-mode "smart"
-  "Major mode for editing smart scripts."
+  "Major mode for editing smart scripts.
+
+\\{smart-mode-map}"
   ;;:syntax-table smart-mode-syntax-table
 
   ;;(use-local-map smart-mode-map)
 
-  (smart-mode-set-indent-defaults)
-  (smart-mode-set-comment-handling)
   (smart-mode-set-font-lock-defaults)
+  (smart-mode-set-indent-defaults)
+  (smart-mode-setup-comment-handling)
 
   (set (make-local-variable 'compile-command)
        ;; (concat "make -k "
@@ -3934,11 +4027,15 @@ Returns `t' if there's a next dependency line, or nil."
     ;;(font-lock-fontify-buffer) ; missing in emacs 24
     (font-lock-fontify-region (point-min) (point-max))))
 
-(defun smart-mode-font-lock (bound)
-  ;;(message "font-lock: %S" (buffer-substring (point) bound))
+(defun smart-mode-font-lock-highlight (limit)
+  ;;(message "font-lock-highlight: point(%S) limit(%S) fl-beg(%S) f-end(%S) change-beg(%S) change-end(%S)"
+  ;;         (point) limit font-lock-beg font-lock-end
+  ;;         smart-mode-change-beg smart-mode-change-end)
   (unless smart-mode-inhibit-fontification
-    (smart-mode-scan bound))
+    (smart-mode-highlight-region (point) limit))
   nil)
+
+(defun smart-mode-highlight-region (&optional beg end))
 
 (defun smart-mode-update-mode-line (&optional pos)
   "Show text semantic at point."
