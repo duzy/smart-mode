@@ -501,6 +501,10 @@
   '((t :inherit font-lock-constant-face))
   "Face to used to highlight calling commas ','."
   :group 'smart)
+(defface smart-mode-call-builtin-face
+  '((t :inherit font-lock-builtin-face))
+  "Face to used to highlight names of builtin-callings."
+  :group 'smart)
 (defface smart-mode-call-var-name-face
   '((t :inherit font-lock-variable-name-face))
   "Face to used to highlight names of var-callings."
@@ -553,7 +557,7 @@
   :group 'smart)
 
 (defface smart-mode-bareword-face
-  '()
+  '((t :inherit smart-mode-no-face))
   "Face to used to highlight barewords."
   :group 'smart)
 
@@ -1960,7 +1964,12 @@
      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-call-var-regex))
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
       (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-call-var-name-face)
+      (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face
+                         (cond
+                          ((string-match-p smart-mode-builtins-regex (match-string 3))
+                           'smart-mode-call-builtin-face)
+                          ;; TODO: warn unknown names
+                          ('smart-mode-call-var-name-face)))
       (setq step (goto-char (match-end 0))
             left (match-string 2))); left = '('
      ;; calling delegations and closures rules: ${...
@@ -2314,7 +2323,7 @@
       ;; Builtin commands
       ((looking-at smart-mode-builtins-regex)
        ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
+       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-builtin-face)
        (setq step (goto-char (match-end 0))))
       ;; User expressions: user->xxx +=
       ((looking-at (concat "\\(user\\)" smart-mode-selection-arrows-nocapture)); user=>  user->
@@ -2483,7 +2492,7 @@
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-builtin-face)
+      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-builtin-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; User expressions: user->xxx +=
