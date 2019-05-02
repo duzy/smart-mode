@@ -4051,7 +4051,7 @@ Returns `t' if there's a next dependency line, or nil."
   t)
 (defun smart-mode-scan-trace-o (tag result end &optional on)
   (if (or on smart-mode-scan-trace-on)
-      (apply 'message "scan%s:[%s,%s)(%s) %s"
+      (apply 'message "scan%s:[%s,%s)(%s)%S"
              (list (if tag (concat "-" tag) "") (point) end result
                    (buffer-substring (point) (min (line-end-position) end)))))
   result); defun
