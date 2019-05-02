@@ -552,7 +552,7 @@
   :group 'smart)
 
 (defface smart-mode-no-face
-  '() ; no face (system default face)
+  '((t)) ; no face (system default face)
   "Face to used to highlight barewords."
   :group 'smart)
 
@@ -927,7 +927,7 @@
 (defun smart-mode-warning-rest-line (tag end)
   (setq end (min (line-end-position) end))
   (let ((beg (point)) (s (buffer-substring (point) end)))
-    (smart-mode-warning-region beg end "%s: %s" tag s)
+    (smart-mode-warning-region beg end "%s: %S" tag s)
     end))
 
 (defun smart-mode-scan-region-specific (end name semantic)
@@ -1004,7 +1004,7 @@
 
 (defun smart-mode-scan (end)
   (let ((rx-recipe "\\(\t\\)\\([^\n]*\\)\n")
-        (pre-point) (sema) (dia))
+        (pre-point) (sema) (dia) (pos))
     (smart-mode-scan-trace-i nil end)
     ;;(remove-list-of-text-properties (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
     (while (< (point) end)
@@ -1026,7 +1026,10 @@
           ;;  (match-beginning 2) (match-end 2)
           ;;  "todo|%s" (match-string 2))
           ;; (goto-char (match-end 0))
-          (smart-mode-scan-recipes nil end))
+          (setq pos (match-end 0))
+          (smart-mode-scan-recipes nil end)
+          (unless (< pos (point))
+            (goto-char pos)))
          (t
           (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
           (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
@@ -2418,9 +2421,11 @@
   (smart-mode-scan** recipe-list
       ((begin step) (pos))
       (and (looking-back "^") (looking-at "\t"))
+    ;;
     ;; keep scanning for recipes
     (while (looking-at "^\t");;(and (looking-back "^") (looking-at "\t"))
       ;;(smart-mode-scan-trace-o (concat tag "#1.0") smart-mode-scan-dialect end t)
+      (setq pos (point))
       (if (smart-mode-scan-recipe end scanner nil)
           (progn
             ;;(smart-mode-scan-trace-o (concat tag "#1.1") smart-mode-scan-dialect end t)
@@ -2432,7 +2437,8 @@
       ;;   (smart-mode-scan-trace-o (concat tag "#1.2") smart-mode-scan-dialect end t)
       ;;   (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" smart-mode-scan-dialect (match-string 0))
       ;;   (setq step (goto-char (match-end 0)))))
-      ); cond
+      (unless (< pos (point))
+        (setq step (goto-char (line-end-position))))); cond
     ;;
     ;; looking for ending of the recipe (continue or done)
     (cond
