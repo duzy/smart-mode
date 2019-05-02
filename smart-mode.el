@@ -1156,13 +1156,15 @@
 
 (defun smart-mode-scan-assign-or-rule (end)
   (smart-mode-scan* assign-or-rule
-      ((begin (point))) (looking-back "^[ \t]*")
+      ((begin (point)) (pos)) (looking-back "^[ \t]*")
     (if (looking-at "[ \t]+"); line preceding spaces
-        (setq step (goto-char (match-end 0))
-              begin step))
+        (setq step (goto-char (match-end 0)) begin step))
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (and
+     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
      (when (smart-mode-scan-expr end); the first expression (left operand)
        t)
+     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
      (if (looking-at "[ \t]+"); spaces after the first expression
          (setq step (goto-char (match-end 0)))
        t)
@@ -1170,11 +1172,13 @@
       ;;
       ;; assignments: foo := ...
       ((looking-at smart-mode-assign-regex)
+       ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
        (when (smart-mode-scan-assign begin end)
          (setq step end result t)))
       ;;
       ;; too many colons
       ((looking-at "\\(::+\\)[ \t]*"); ::+
+       ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
        (smart-mode-warning-region (1+ (match-beginning 1)) (match-end 1) "too many colons")
        (setq step (goto-char (1- (match-end 0))))
        (when (smart-mode-scan-rule-colon-after begin end)
@@ -1182,11 +1186,17 @@
       ;;
       ;; single-target rules
       ((looking-at "\\(:\\)[^:=]")
-       (when (smart-mode-scan-rule-colon-after begin end)
-         (setq step end result t)))
+       ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
+       ;;(setq pos (point))
+       (unless (smart-mode-scan-rule-colon-after begin end)
+         (smart-mode-scan-trace-i (concat tag "#3.4") end t))
+       (setq step end result t))
       ;;
       ;; multiple-targets rules
-      ((smart-mode-scan-rule-rest-targets begin end)
+      ((looking-at "[^:]")
+       ;;(smart-mode-scan-trace-i (concat tag "#3.5") end t)
+       (unless (smart-mode-scan-rule-rest-targets begin end)
+         (smart-mode-scan-trace-i (concat tag "#3.6") end t))
        (setq step end result t)))))); defun
 
 (defun smart-mode-scan-assign-name (end); region-specific
@@ -1258,14 +1268,19 @@
 
 (defun smart-mode-scan-rule-targets (end); region-specific
   (smart-mode-scan* rule-targets () t
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
     (smart-mode-scan-rule-rest-targets (point) end)))
 
 (defun smart-mode-scan-rule-rest-targets (begin end)
   (smart-mode-scan* rule-rest-targets () (looking-at "[^#\n]")
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
     ;; scan target expressions after the first at `begin'
     (smart-mode-scan-list end 'smart-mode-call-rule-name-face ":"); target expressions
     (when (looking-at "\\(:\\)[^:=]"); the first colon ':'
-      (setq result (smart-mode-scan-rule-colon-after begin end)))))
+      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+      (when (smart-mode-scan-rule-colon-after begin end)
+        ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+        (setq step end result t)))))
 
 (defun smart-mode-scan-special-rule (end)
   (smart-mode-scan* special-rule
@@ -1757,14 +1772,14 @@
       (smart-mode-scan-expr end suggested-face)))))
 
 (defun smart-mode-scan-list (end &optional suggested-face delim recipe)
-  (smart-mode-scan** list () t;(looking-at "[^\n)\\]]")
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+  (smart-mode-scan** list ((pos)) t;(looking-at "[^\n)\\]]")
+    (if (looking-at "[ \t]+");(looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
         (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
      ((and delim (stringp delim) (looking-at delim))
       ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-      (setq step end result 'delim)); (match-string 0)
+      (setq step end result t)); (match-string 0)
      ((looking-at "[#\n)]\\|\\]")
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
       (setq step end result t))
@@ -1774,15 +1789,24 @@
       (setq step (goto-char (match-end 0)))
       (cond
        ((and recipe (looking-at "\t"))
+        ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
         (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
-        (setq step (goto-char (match-end 0))))))
+        (setq step (goto-char (match-end 0))))
+       ((<= end step)
+        (setq pos end end (line-end-position))
+        (if (= step end) (setq result t)
+          (smart-mode-scan-trace-o (concat tag "#3.2") (format "extends %s->%s" pos end) end t)))
+       ))
      ((looking-at "\\(\\\\\\)\\([^\n]\\)"); unknown in-line escapes
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (list): %s" (match-string 2))
       (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end suggested-face)
       ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
-      (setq step (point))))))
+      (setq step (point))))
+    (when (and (not result) (<= end step))
+      ;;(smart-mode-scan-trace-o (concat tag "#6") result end t)
+      (setq step end result t))))
 
 (defun smart-mode-scan-comment (end)
   ;;(smart-mode-scan-trace-i "comment#" end t)
