@@ -1003,24 +1003,49 @@
       t)))
 
 (defun smart-mode-scan (end)
-  (let ((pre-point))
+  (let ((rx-recipe "\\(\t\\)\\([^\n]*\\)\n")
+        (pre-point) (sema) (dia))
     (smart-mode-scan-trace-i nil end)
+    ;;(remove-list-of-text-properties (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
     (while (< (point) end)
-      ;;(remove-list-of-text-properties step end '(font-lock-face face ,@(smart-mode-scan-properties)))
       (setq pre-point (point))
       (cond
-       ;; ((and (looking-back "^") (looking-at "\t[ \t]*\\([^\n]*\\)")
-       ;;       ;;(not (string= (get-text-property (match-beginning 1) 'smart-semantic) 'recipe))
-       ;;       t)
-       ;;  (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid tab (%s)" (get-text-property (match-beginning 1) 'smart-semantic))
-       ;;  (goto-char (match-end 0)))
-       ((or (and (looking-back "^") (looking-at "\t[ \t]*\\([^\n]*\\)\n"))
-            (looking-at "\n\t[ \t]*\\([^\n]*\\)\n"))
-        (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid tab (%s)" (match-string 1))
-        (smart-mode-scan-trace-o nil (format "INVALID TAB: %s" (match-string 1)) end)
-        (goto-char (match-end 0)))
+       ((or (looking-at (concat "^" rx-recipe))
+            (looking-at (concat "\n" rx-recipe)))
+        (setq sema (get-text-property (match-beginning 1) 'smart-semantic))
+        (setq dia (get-text-property (match-beginning 1) 'smart-dialect))
+        (cond
+         ((string= sema 'recipe-prefix)
+          (goto-char (match-end 0)))
+         (smart-mode-scan-dialect
+          ;; (put-text-property (match-beginning 1) (match-end 2) 'smart-dialect smart-mode-scan-dialect)
+          ;; (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
+          ;; (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+          ;; (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          ;; (smart-mode-warning-region
+          ;;  (match-beginning 2) (match-end 2)
+          ;;  "todo|%s" (match-string 2))
+          ;; (goto-char (match-end 0))
+          (smart-mode-scan-recipes nil end))
+         (t
+          (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
+          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          (smart-mode-warning-region
+           (match-beginning 2) (match-end 2)
+           "%s: invalid tab: %s"
+           smart-mode-scan-dialect (match-string 2))
+          (smart-mode-scan-trace-o
+           nil (format "INVALID TAB: %s" (match-string 2))
+           end)
+          (goto-char (match-end 0)))))
+       ((looking-at "^[ \t]*\\(\n+\\|#\\)")
+        (setq smart-mode-scan-dialect nil)
+        (if (string= "#" (match-string 1))
+            (smart-mode-scan-comment end)
+          (goto-char (match-end 0))))
        ((looking-at "#") (smart-mode-scan-comment end))
-       ((looking-at "[ \t\n]+") (goto-char (match-end 0)))
+       ((looking-at "[)]\\|]\\|[ \t]+") (goto-char (match-end 0)))
        ((looking-back "^[ \t]*"); beginning of line
         (cond
          ((looking-at "\\(project\\)[ \t#\n]")
