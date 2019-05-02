@@ -881,9 +881,9 @@
                  (when (<= step pre-body-step)
                    (smart-mode-scan-trace-o ,tag-o (format "ERROR(%s %s)(%s %s) %s" pre-body-point (point) pre-body-step step body-result) end t)
                    (smart-mode-warning-rest-line ,tag-s end)
-                   (setq step end)))); let
+                   (setq step end))
+                 (smart-mode-scan-trace-o ,tag-o result end (not result)))); let
            )
-         (smart-mode-scan-trace-o ,tag-o result end (not result))
          result)))
   ;;(macroexpand-1 '(smart-mode-scan* foo "^foo$" ((a)) (message "xxx") t))
   (defmacro smart-mode-scan** (tag vars cond &rest body)
@@ -907,9 +907,9 @@
                  (when (<= step pre-body-step)
                    (smart-mode-scan-trace-o ,tag-o (format "ERROR*(%s %s)(%s %s) %s" pre-body-point (point) pre-body-step step body-result) end t)
                    (smart-mode-warning-rest-line ,tag-s end)
-                   (setq step end)))); let
+                   (setq step end)))
+               (smart-mode-scan-trace-o ,tag-o result end (not result))); let
            )
-         (smart-mode-scan-trace-o ,tag-o result end (not result))
          result)))
 
   ;;(defmacro deftext (functionname texttoinsert)
@@ -2454,7 +2454,9 @@
      (t
       (smart-mode-scan-trace-i (concat tag "#5") end)
       ;;(setq step end)
-      nil)))); defun
+      nil))
+    (unless (and result (<= end step))
+      (setq step end result t)))); defun
 
 (defun smart-mode-scan-recipe-prefix (end); region-specific
   ;;(smart-mode-scan-trace-i "recipe-prefix#" end t)
@@ -2497,19 +2499,26 @@
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") dialect end t)
       (unless (funcall scan end)
         (smart-mode-scan-trace-o (concat tag "#2.1") dialect end t))
-      (when (looking-at "[^\n]+"); unscanned recipe text
-        (smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
+      (cond
+       ((looking-back "\n");(and (looking-back "\\\n") (looking-at "\t"))
+        ;;(smart-mode-scan-trace-o (concat tag "#2.2") smart-mode-scan-dialect end t)
+        (setq step end result t))
+       ((looking-at "[^\n]+"); unscanned recipe text
+        ;;(smart-mode-scan-trace-o (concat tag "#2.3") smart-mode-scan-dialect end t)
         (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned %s recipe: %s" dialect (match-string 0))
-        (goto-char (match-end 0)))
-      (setq step (point))); unwind-protect 
-    (if (looking-at "\n")
+        (goto-char (match-end 0))))
+      (setq step (point))); unwind-protect
+    (if (or result (<= end step) (<= end (point))
+            (and (looking-at "\n") (goto-char (match-end 0))))
         (progn
-          (goto-char (match-end 0))
+          ;;(smart-mode-scan-trace-o (concat tag "#3.1") dialect end t)
           (put-text-property begin (point) 'smart-semantic 'recipe)
           (put-text-property begin (point) 'smart-dialect (make-symbol dialect))
-          ;;(smart-mode-scan-trace-o (concat tag "#3.1") dialect end t)
-          (setq step end result t))
-      (smart-mode-scan-trace-o (concat tag "#3.2") dialect end t)))); defun
+          (unless result
+            (setq step end result t)))
+      (smart-mode-scan-trace-o (concat tag "#3.2") dialect end t))
+    (unless result;(and result (<= end step))
+      (smart-mode-scan-trace-o (concat tag "#4") dialect end t)))); defun
 
 (defun smart-mode-scan-recipe-builtin (end)
   (smart-mode-scan* recipe-builtin
@@ -2929,11 +2938,11 @@
        ((or (looking-at ";\\(?:\\\\\n\\|[ \t]\\)*\\(@\\)")
             (and (looking-back ";\\(?:\\\\\n\\|[ \t]\\)*")
                  (looking-at "\\(@\\)")))))
-      (smart-mode-scan-trace-i (concat tag "#1.3") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\n"); continual lines: \\\n
-      (smart-mode-scan-trace-i (concat tag "#1.4") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#1.4") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "&&"); scan the &&
@@ -2960,28 +2969,38 @@
       (smart-mode-scan-comment end)
       (setq step (point)))
      ((looking-at "\\-")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.10") end t)
       (smart-mode-scan-flag end)
       (setq step (point)))
      ((looking-at "[$&]")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.11") end t)
       (smart-mode-scan-call end)
       (setq step (point)))
      ((looking-at (concat smart-mode-bash-builtins-regex "\\s-"))
+      ;;(smart-mode-scan-trace-i (concat tag "#1.12") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
       (setq step (goto-char (match-end 0))
             face 'smart-mode-no-face))
      ((looking-at smart-mode-bash-keywords-regex)
+      ;;(smart-mode-scan-trace-i (concat tag "#1.13") end t)
       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[[:alpha:]_][[:alnum:]_+-]*")
+      ;;(smart-mode-scan-trace-i (concat tag "#1.14") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0)))
       (unless (looking-at "/")
         (setq face 'smart-mode-no-face)))
      ((and (not (looking-at "[$&#]\\|\\\\[$]"))
            (looking-at "\\(?:[{(|)}+-]\\|\\s.\\)+"))
+      ;;(smart-mode-scan-trace-i (concat tag "#1.15") end t)
       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))))
-     ((setq step (goto-char (1+ (point))))))))
+     (t
+      ;;(smart-mode-scan-trace-i (concat tag "#1.x") end t)
+      (setq step (goto-char (1+ (point))))))
+    (if (and (not result) (<= end (point)))
+        (setq step end result t))))
 
 (defun smart-mode-scan-bash-string (quote end)
   (smart-mode-scan* bash-string ((lastpoint step) (pos)) (looking-at quote)
