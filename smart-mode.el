@@ -45,7 +45,7 @@
   "Regex to match a space (or continual line)")
 
 (defconst smart-mode-url-schemes
-  `("http" "https" "ws" "wss" "ftp" "sftp" "mailto")
+  `("file" "http" "https" "ws" "wss" "ftp" "sftp" "mailto")
   "List of url schemes.")
 (defconst smart-mode-url-schemes-regex
   (regexp-opt smart-mode-url-schemes 'words)
