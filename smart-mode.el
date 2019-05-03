@@ -943,6 +943,7 @@
   ;; remove old properties to safe memory
   (remove-list-of-text-properties beg end '(smart-message font-lock-face face))
   ;;(put-text-property beg end 'smart-message (format "%s" (apply 'format string objects)))
+  (message "warning: %s" (apply 'format string objects))
   (put-text-property beg end 'font-lock-face 'smart-mode-warning-face))
 
 (defun smart-mode-warning-rest-line (tag end)
