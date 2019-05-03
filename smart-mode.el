@@ -766,6 +766,7 @@
 
 ;; NOTE: without 'syntax-table forward-word fails
 (defvar-local smart-mode-scan-properties
+  ;;(list 'smart-semantic 'smart-dialect 'smart-indent 'smart-message)
   (list 'smart-semantic 'smart-dialect 'smart-indent 'smart-message 'syntax-table)
   "Text properties used for code regions/tokens.")
 
@@ -920,14 +921,34 @@
 
 ;;---- DEFUNS ------------------------------------------------------------
 
+(defun smart-text-property (beg end prop value)
+  (when (< beg end)
+    ;;(message "%s:0: %S" prop (buffer-substring beg end))
+    (remove-text-properties beg end (list prop))
+    ;;(remove-list-of-text-properties beg end (list prop))
+    ;;(message "%s:1: %S" prop (buffer-substring beg end))
+    ; use %s to remove properties
+    (cond
+     ((stringp value)
+      (put-text-property beg end prop (format "%s" value)))
+     ((put-text-property beg end prop value)))
+    ;;(message "%s:2: %S" prop (buffer-substring beg end))
+    t))
+
+(defun smart-match-property (a b prop value)
+  (let ((beg (match-beginning a)) (end (match-end b)))
+    (smart-text-property beg end prop value)))
+
 (defun smart-mode-warning-region (beg end string &rest objects)
-  (put-text-property beg end 'font-lock-face 'smart-mode-warning-face)
-  (put-text-property beg end 'smart-message (apply 'format string objects)))
+  ;; remove old properties to safe memory
+  (remove-list-of-text-properties beg end '(smart-message font-lock-face face))
+  ;;(put-text-property beg end 'smart-message (format "%s" (apply 'format string objects)))
+  (put-text-property beg end 'font-lock-face 'smart-mode-warning-face))
 
 (defun smart-mode-warning-rest-line (tag end)
   (setq end (min (line-end-position) end))
   (let ((beg (point)) (s (buffer-substring (point) end)))
-    (smart-mode-warning-region beg end "%s: %S" tag s)
+    (smart-mode-warning-region beg end "%s: %s" tag s)
     end))
 
 (defun smart-mode-scan-region-specific (end name semantic)
@@ -1005,7 +1026,12 @@
 (defun smart-mode-scan (end)
   (let ((rx-recipe "\\(\t\\)\\([^\n]*\\)\n")
         (pre-point) (sema) (dia) (pos))
-    ;;(remove-list-of-text-properties (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
+    ;;
+    ;; remove all properties to safe memory
+    (remove-list-of-text-properties ;fontified
+     (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
+    ;;
+    ;; continual semantic
     (when (< (point-min) (1- (point)))
       (setq sema (get-text-property (1- (point)) 'smart-semantic)))
     (smart-mode-scan-trace-o "#0" sema end t)
@@ -1043,10 +1069,10 @@
          ((string= sema 'recipe-prefix)
           (goto-char (match-end 0)))
          (smart-mode-scan-dialect
-          ;; (put-text-property (match-beginning 1) (match-end 2) 'smart-dialect smart-mode-scan-dialect)
-          ;; (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
-          ;; (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-          ;; (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          ;; (samrt-match-property 1 2 'smart-dialect smart-mode-scan-dialect)
+          ;; (samrt-match-property 1 2 'smart-semantic 'recipe)
+          ;; (samrt-match-property 1 1 'smart-semantic 'recipe-prefix)
+          ;; (samrt-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
           ;; (smart-mode-warning-region
           ;;  (match-beginning 2) (match-end 2)
           ;;  "todo|%s" (match-string 2))
@@ -1056,9 +1082,9 @@
           (unless (< pos (point))
             (goto-char pos)))
          (t
-          (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
-          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          (smart-match-property 1 2 'smart-semantic 'recipe)
+          (smart-match-property 1 1 'smart-semantic 'recipe-prefix)
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
           (smart-mode-warning-region
            (match-beginning 2) (match-end 2)
            "%s: invalid tab: %s"
@@ -1090,7 +1116,7 @@
       (cond
        ((and (= (point) pre-point) (looking-at "\\([^\n]+\\)\n\\(?:[ \t]*\\(?:#[^\n]*\\)?\n\\)*"))
         (smart-mode-scan-trace-o "#2.1" sema end t)
-        (remove-list-of-text-properties (match-beginning 1) (match-end 1) '(font-lock-face face ,@(smart-mode-scan-properties)))
+        ;;(remove-list-of-text-properties (match-beginning 1) (match-end 1) '(font-lock-face face ,@(smart-mode-scan-properties)))
         (smart-mode-warning-region (match-beginning 1) (match-end 1) "INVALID: %s" (match-string 1))
         (smart-mode-scan-trace-o nil (format "INVALID: %s" (match-string 1)) end)
         (goto-char (match-end 0)))
@@ -1105,8 +1131,8 @@
 
 (defun smart-mode-scan-project (end) ; project -xxx -yyy zzz (...)
   (smart-mode-scan* project () (looking-at "\\(project\\)[ \t]*")
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic (match-string 1))
-    (smart-mode-match-set-face-goto 1 'font-lock-keyword-face)
+    (smart-match-property 1 1 'smart-semantic (make-symbol (match-string 1)))
+    (smart-match-property 1 1 'font-lock-face 'font-lock-keyword-face)
     (setq step (goto-char (match-end 0)))
     (and (< step end) (looking-at "[\\-]")
          (smart-mode-scan-project-options end)
@@ -1133,14 +1159,14 @@
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at smart-mode-project-option-regex)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-flag-sign-face)
+      (smart-match-property 2 2 'font-lock-face 'smart-mode-flag-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-flag-regex)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid project option: %s" (match-string 0))
       (setq step (goto-char (match-end 0)))))
     (when (looking-at "(")
-      (put-text-property begin (point) 'smart-semantic 'project-options)
+      (smart-text-property begin (point) 'smart-semantic 'project-options)
       (setq result t))))
 
 (defun smart-mode-scan-project-name (end)
@@ -1150,8 +1176,8 @@
     (cond
      ;; scan valid project name
      ((looking-at smart-mode-project-name-regex)
-      (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'project-name)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-project-name-face)
+      (smart-match-property 1 1 'smart-semantic 'project-name)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-project-name-face)
       (setq step (goto-char (match-end 0)) result t))
      ;; highlight invalid project name: zzz (
      ((looking-at "\\([^(\n]+\\)"); invalid but still results t
@@ -1161,7 +1187,7 @@
 (defun smart-mode-scan-project-bases (end)
   (smart-mode-scan* project-bases ((begin step)) (looking-at "(")
     (when (smart-mode-scan-group end 'smart-mode-pseg-face)
-      (put-text-property begin (point) 'smart-semantic 'project-bases)
+      (smart-text-property begin (point) 'smart-semantic 'project-bases)
       (if (looking-at "[ \t]+"); spaces
           (setq step (goto-char (match-end 0))))
       (setq step (point)
@@ -1173,7 +1199,7 @@
   (smart-mode-scan* statement
       ((begin step) (stmt))
       (looking-at (concat smart-mode-statements-regex "[ \t]*"))
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'font-lock-keyword-face)
+    (smart-match-property 1 1 'font-lock-face 'font-lock-keyword-face)
     (setq begin (match-beginning 1)
           step (goto-char (match-end 0))
           stmt (match-string 1))
@@ -1238,8 +1264,8 @@
   (smart-mode-scan* assign-name
       ((begin (point)))
       (smart-mode-scan-expr end)
-    (put-text-property begin (point) 'smart-semantic 'assign-name)
-    (put-text-property begin (point) 'font-lock-face 'smart-mode-assign-name-face)
+    (smart-text-property begin (point) 'smart-semantic 'assign-name)
+    (smart-text-property begin (point) 'font-lock-face 'smart-mode-assign-name-face)
     (setq step (point))
     (when (looking-at "[ \t]+"); spaces
       (setq step (goto-char (match-end 0))))
@@ -1247,8 +1273,8 @@
     (if (looking-at (concat "[ \t]*" smart-mode-assign-regex "[ \t]*"))
         (progn
           ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+          (smart-match-property 1 1 'smart-semantic 'assign-sign)
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
           (goto-char (match-end 0))
           (setq step end result t))
       (smart-mode-warning-region (point) end "invalid expression of assignment")
@@ -1260,8 +1286,8 @@
       ((begin (point)) (values end))
       (looking-at (concat "[ \t]*" smart-mode-assign-regex))
     (smart-mode-scan-trace-i (concat tag "#0") end t)
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+    (smart-match-property 1 1 'smart-semantic 'assign-sign)
+    (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
     (setq step (goto-char (match-end 0)))
     (while (and (< values (point-max))
                 (equal (get-text-property values 'smart-semantic) 'assign-values))
@@ -1278,7 +1304,7 @@
       (or continue
           (if (looking-back (concat "[ \t]*" smart-mode-assign-regex))
               (setq begin (match-end 1))))
-    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
     (setq step (goto-char (match-end 0)))
     (if (looking-at "[ \t]+"); spaces
         (setq step (goto-char (match-end 0))))
@@ -1299,17 +1325,17 @@
      ((looking-at "$")
       ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
       (setq step end result t)))
-    (put-text-property begin (point) 'smart-semantic 'assign-values)
-    ;;(smart-mode-scan-trace-o (concat tag "#4") (format "%s %s %s" (point) step result) end t)
+    (smart-text-property begin (point) 'smart-semantic 'assign-values)
+    (smart-mode-scan-trace-o (concat tag "#4") (format "%s %s %s" (point) step result) end t)
     (if (and (not result) (or (<= end step) (<= end (point))))
         (setq step end result t))))
 
 (defun smart-mode-scan-assign (begin end)
   (smart-mode-scan* assign () (< begin end)
-    (put-text-property begin (match-beginning 1) 'smart-semantic 'assign-name)
-    (put-text-property begin (match-beginning 1) 'font-lock-face 'smart-mode-assign-name-face)
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'assign-sign)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+    (smart-text-property begin (match-beginning 1) 'smart-semantic 'assign-name)
+    (smart-text-property begin (match-beginning 1) 'font-lock-face 'smart-mode-assign-name-face)
+    (smart-match-property 1 1 'smart-semantic 'assign-sign)
+    (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (setq step (goto-char (match-end 1)))
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
@@ -1338,15 +1364,15 @@
       ((begin) (name))
       (and (looking-back "^[ \t]*")
            (looking-at "\\(:\\)[^:=]"))
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'rule-colon)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
+    (smart-text-property 1 1 'smart-semantic 'rule-colon)
+    (smart-text-property 1 1 'font-lock-face 'smart-mode-rule-colon-face)
     (setq step (goto-char (match-end 1))
           begin (match-beginning 1))
     (if (looking-at "[ \t]+"); spaces after the first colon ':'
         (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (when (looking-at (concat smart-mode-special-rule-names-regex "[ \t]*"))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-special-rule-name-face)
+      (smart-text-property 1 1 'font-lock-face 'smart-mode-special-rule-name-face)
       (setq step (goto-char (match-end 0))
             name (match-string 1))
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
@@ -1378,9 +1404,9 @@
      ((and regex (looking-at regex)); known statement options
       (cond
        ((and (match-beginning 1) (match-beginning 2))
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face))
-       ((put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-flag-face)))
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-flag-sign-face)
+        (smart-match-property 2 2 'font-lock-face 'smart-mode-flag-face))
+       ((smart-match-property 0 0 'font-lock-face 'smart-mode-flag-face)))
       (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-flag-regex)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
@@ -1397,7 +1423,7 @@
       (cond
        ((looking-at "[ \t]+") (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\n"); continual lines
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
         (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (special rule): %s" (match-string 2))
@@ -1421,14 +1447,14 @@
 (defun smart-mode-scan-rule-colon-after (begin end)
   (smart-mode-scan* rule-colon () (looking-at "\\(:\\)[^:=]")
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'rule-colon)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
+    (smart-match-property 1 1 'smart-semantic 'rule-colon)
+    (smart-match-property 1 1 'font-lock-face 'smart-mode-rule-colon-face)
     (setq step (goto-char (match-end 1))
           smart-mode-scan-dialect nil)
     ;;
     ;; rescan the first target as rule-name for the right color
     (when (number-or-marker-p begin)
-      (put-text-property begin (match-beginning 1) 'smart-semantic 'rule-targets)
+      (smart-text-property begin (match-beginning 1) 'smart-semantic 'rule-targets)
       (goto-char begin)
       (if (not (looking-at "\\(?:\\\\\n\\|[ \t]\\)*:")); not just a ':' at the beginning
           (smart-mode-scan-expr end 'smart-mode-call-rule-name-face))
@@ -1449,7 +1475,7 @@
      ;; the optional colon ':' after ']'
      (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)")
        ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
-       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-rule-colon-face)
+       (smart-match-property 1 1 'font-lock-face 'smart-mode-rule-colon-face)
        (setq step (goto-char (match-end 0))
              begin step)))
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
@@ -1457,7 +1483,7 @@
     ;; scan the optional dependencies
     (when (looking-at "[^;#\n]")
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (put-text-property begin (point) 'smart-semantic 'dependencies)
+      (smart-text-property begin (point) 'smart-semantic 'dependencies)
       (if (smart-mode-scan-dependencies end)
           (progn
             ;;(smart-mode-scan-trace-i (concat tag "#4.1") end t)
@@ -1525,8 +1551,8 @@
       ((begin))
       (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)"); "\\["
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-modifier-left-brack-face)
-    (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'modifiers)
+    (smart-match-property 1 1 'font-lock-face 'smart-mode-modifier-left-brack-face)
+    (smart-match-property 1 1 'smart-semantic 'modifiers)
     (setq step (goto-char (match-end 1))
           begin (match-beginning 1))
     (and
@@ -1562,21 +1588,21 @@
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at "\\(\\\\\\)\n"); continual lines
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "|"); the modifier bar
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-bar-face)
+      (smart-match-property 0 0 'font-lock-face 'smart-mode-modifier-bar-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\]")
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
-      (put-text-property lastpoint (match-end 0) 'smart-semantic 'modifiers)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-modifier-right-brack-face)
+      (smart-text-property lastpoint (match-end 0) 'smart-semantic 'modifiers)
       (setq step end result t))
      ((looking-at "((")
-      (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
+      (smart-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
       (if (smart-mode-scan-parameters end)
           (setq lastpoint (point))))
      ((looking-at "([^(]")
-      (put-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
+      (smart-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
       (if (smart-mode-scan-modifier end)
           (setq lastpoint (point)))))))
 
@@ -1584,7 +1610,7 @@
   (smart-mode-scan* parameters
       ((begin) (pos))
       (looking-at "((") ;; for parameters: ((foo bar))
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
     (setq step (goto-char (match-end 0)); skip '(('
           begin (match-beginning 0))
     (and
@@ -1593,8 +1619,8 @@
      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
      (cond
       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\())\\)")
-       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
-       (put-text-property begin (match-end 1) 'smart-semantic 'parameters)
+       (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
+       (smart-text-property begin (match-end 1) 'smart-semantic 'parameters)
        (goto-char (match-end 0))
        (setq step end result t))
       ((setq pos (point)   step (goto-char (line-end-position)))
@@ -1611,7 +1637,7 @@
       (setq step end result t))
      ((looking-at "\\(\\\\\\)\n") ; continual lines
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
       ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
@@ -1619,7 +1645,7 @@
       (setq step (goto-char (match-end 0))))
      ((looking-at "[@]") ; special names for parameters
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-parameter-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-parameter-face)
       (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end 'smart-mode-parameter-face)
       ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
@@ -1634,7 +1660,7 @@
   (smart-mode-scan* modifier
       ((begin) (name) (face 'smart-mode-no-face))
       (looking-at "\\(?:\\\\\n\\|[ \t]\\)*(")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
     (setq step (goto-char (match-end 0))
           begin (match-beginning 0))
     (if (looking-at "[ \t]+"); spaces "\\(?:\\\\\n\\|[ \t]\\)+"
@@ -1643,7 +1669,7 @@
     ;; looking at modifier name, dialect, etc., but not scanned
     (cond
      ;; ((looking-at "\\(\\\\\\)\n"); continual lines
-     ;;  (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+     ;;  (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
      ;;  (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-modifiers-regex)
       ;;(smart-mode-scan-trace-o (concat tag "#2.1") (match-string 0) end t)
@@ -1659,7 +1685,7 @@
             face 'smart-mode-modifier-dialect-face))
      ((looking-at smart-mode-dialect-modifiers-regex)
       ;;(smart-mode-scan-trace-o (concat tag "#2.3") (match-string 2) end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-modifier-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-modifier-name-face)
       (setq name (match-string 1)
             smart-mode-scan-dialect (match-string 2)
             face 'smart-mode-modifier-dialect-face
@@ -1677,8 +1703,8 @@
          (setq step (goto-char (match-end 0)))
        (setq step (point))))
     (when (looking-at ")")
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
-      (put-text-property begin (match-end 0) 'smart-semantic 'modifier)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+      (smart-text-property begin (match-end 0) 'smart-semantic 'modifier)
       (goto-char (match-end 0))
       (setq step end result t))))
 
@@ -1689,7 +1715,7 @@
     (cond
      ((looking-at ")") (setq step end result t))
      ((looking-at "\\(\\\\\\)\n"); continual lines
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end 'smart-mode-modifier-argument-face)
       (setq step (point))))))
@@ -1713,19 +1739,19 @@
     (cond
      ((looking-at "\n")
       ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
-      (put-text-property begin (match-end 0) 'smart-semantic 'dependencies)
-      (put-text-property begin (match-end 0) 'smart-dialect dialect)
+      (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+      (smart-text-property begin (match-end 0) 'smart-dialect dialect)
       (when (and (looking-at "\n\\(\t\\)\\(\n\\)") (<= (match-end 0) end))
         ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-        (put-text-property (match-beginning 1) (match-end 2) 'smart-dialect dialect)
-        (put-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
-        (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face))
+        (smart-text-property (match-beginning 1) (match-end 2) 'smart-dialect dialect)
+        (smart-text-property (match-beginning 1) (match-end 2) 'smart-semantic 'recipe)
+        (smart-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+        (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face))
       (setq step end result t))
      ((looking-at "[;#]"); the ';' recipe or '#' comment
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (put-text-property begin (match-end 0) 'smart-semantic 'dependencies)
-      (put-text-property begin (match-end 0) 'smart-dialect dialect)
+      (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+      (smart-text-property begin (match-end 0) 'smart-dialect dialect)
       (setq step end result t))
      ((setq pos (line-end-position))
       ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
@@ -1754,7 +1780,7 @@
              ((looking-at smart-mode-selection-arrows) (smart-mode-scan-sel end suggested-face))
              ((looking-at "=[^>]") (smart-mode-scan-pair end 'smart-mode-pair-value-face))
              ((looking-at "\\(\\\\\\)\n")
-              (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-continual-slash-face)
+              (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-continual-slash-face)
               (goto-char (match-end 0))
               (setq step end result t))
              ((looking-at "\\\\")
@@ -1789,7 +1815,7 @@
               (and (smart-mode-scan-call end suggested-face)
                    (smart-mode-scan-combine end suggested-face)))
              ((looking-at "!")
-              (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-negation-char-face)
+              (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'font-lock-negation-char-face)
               (setq step (goto-char (match-end 0)))
               (smart-mode-scan-expr end suggested-face))
              ((looking-at "[[:alpha:]_]")
@@ -1799,8 +1825,8 @@
               (and (smart-mode-scan-number end suggested-face)
                    (smart-mode-scan-combine end suggested-face)))
              ((looking-at smart-mode-url-regex)
-              (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-url-scheme-face)
-              (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-url-face))
+              (smart-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-url-scheme-face)
+              (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-url-face))
              ))
     ;;(smart-mode-scan-trace-o (concat tag "#2") (format "%s %s" step result) end t)
     (if (and (not result) (<= end step)) (setq result t)
@@ -1844,12 +1870,12 @@
       (setq step end result t))
      ((looking-at "\\(\\\\\\)\n"); continual lines
       ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0)))
       (cond
        ((and recipe (looking-at "\t"))
         ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+        (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
        ;; ((<= end step)
        ;;  (setq pos end end (line-end-position))
@@ -1872,7 +1898,7 @@
   (smart-mode-scan** comment
       ((begin) (lastpoint) (line (line-end-position)))
       (looking-at comment-start)
-    (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "<"))
+    (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "<"))
     (setq step (goto-char (match-end 0))
           begin (match-beginning 0)
           lastpoint begin
@@ -1883,40 +1909,40 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
       (cond
        ((looking-at "\\\\\\n")
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-slash-face)
+        (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-comment-slash-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)+" smart-mode-comment-todos-regex 
                             "\\(:\\)\\(?:\\\\\n\\|[ \t]\\)*\\([^.!?\n]*\\)"))
         (if (< lastpoint (match-beginning 1))
-            (put-text-property lastpoint (match-beginning 1) 'font-lock-face 'smart-mode-comment-face))
-        (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-comment-todo-face)
-        (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-comment-tips-face)
+            (smart-text-property lastpoint (match-beginning 1) 'font-lock-face 'smart-mode-comment-face))
+        (smart-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-comment-todo-face)
+        (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-comment-tips-face)
         (setq lastpoint (match-end 3) step (goto-char (match-end 3))))
        ((looking-at smart-mode-url-regex)
         (if (< lastpoint (match-beginning 1))
-            (put-text-property lastpoint (match-beginning 1) 'font-lock-face 'smart-mode-comment-face))
-        (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-comment-url-scheme-face)
-        (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-comment-url-face)
+            (smart-text-property lastpoint (match-beginning 1) 'font-lock-face 'smart-mode-comment-face))
+        (smart-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-comment-url-scheme-face)
+        (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-comment-url-face)
         (setq lastpoint (match-end 3) step (goto-char (match-end 3))))
        ((setq step (goto-char (1+ (point)))))))
     (when (< lastpoint (point))
-      (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-comment-face))
+      (smart-text-property lastpoint (point) 'font-lock-face 'smart-mode-comment-face))
     (when (looking-at (concat comment-end "\n"))
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
       (setq step (goto-char (match-end 0)) result t))
-    (put-text-property (1- (point)) (point) 'syntax-table (string-to-syntax ">"))
-    (put-text-property begin (point) 'smart-semantic 'comment)))
+    (smart-text-property (1- (point)) (point) 'syntax-table (string-to-syntax ">"))
+    (smart-text-property begin (point) 'smart-semantic 'comment)))
 
 (defun smart-mode-scan-escape (end &optional suggested-face)
   (smart-mode-scan* escape ((begin step)) (looking-at "\\\\")
     (setq step (goto-char (match-end 0)))
     (cond
      ((looking-at "\n"); (and (< step end) ...
-      (put-text-property begin (match-end 0) 'font-lock-face 'smart-mode-continual-slash-face)
+      (smart-text-property begin (match-end 0) 'font-lock-face 'smart-mode-continual-slash-face)
       (setq step (goto-char (match-end 0)) result t))
      ((looking-at smart-mode-esc-chars-regex); (and (< step end) ...
-      (put-text-property begin (match-end 0) 'font-lock-face 'smart-mode-escape-slash-face)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-escape-char-face)
+      (smart-text-property begin (match-end 0) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-escape-char-face)
       (setq step (goto-char (match-end 0)) result t))
      ((looking-at "[ \t#]"); (and (< step end) ...
       (smart-mode-warning-region begin (match-end 0) "invalid escape: %s" (match-string 0))
@@ -1933,20 +1959,20 @@
     (cond
      ;; path segment: foo/bar
      ((and (< step end) (looking-at "/"))
-      (put-text-property begin step 'font-lock-face 'smart-mode-pseg-face))
+      (smart-text-property begin step 'font-lock-face 'smart-mode-pseg-face))
      ;; url scheme: file:///xxx/xxx
      ((looking-at (concat "\\(:\\)\\(//" smart-mode-url-string-regex "\\)"))
-      (put-text-property begin (match-end 1) 'font-lock-face 'smart-mode-url-scheme-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-url-face)
+      (smart-text-property begin (match-end 1) 'font-lock-face 'smart-mode-url-scheme-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-url-face)
       (setq step (goto-char (match-end 0))))
      ;; apply it if there's a suggested face
      (suggested-face ; set face suggested by preceding expressions 
       (unless (eq suggested-face 'smart-mode-no-face)
-        (put-text-property begin step 'font-lock-face suggested-face)))
+        (smart-text-property begin step 'font-lock-face suggested-face)))
      ;; ;;
      ;; ;; any other barewords with tailing space(s)
      ;; ((looking-at "\\s-\\|\\s.\\|\n")
-     ;;  (put-text-property begin end 'font-lock-face 'smart-mode-comment-face))
+     ;;  (smart-text-property begin end 'font-lock-face 'smart-mode-comment-face))
      )
     (setq step end result t))); defun
 
@@ -1956,14 +1982,14 @@
     (setq begin (match-beginning 0)
           step (goto-char (match-end 0))
           result t)
-    (put-text-property begin step 'font-lock-face 'smart-mode-constant-face)
+    (smart-text-property begin step 'font-lock-face 'smart-mode-constant-face)
     ))
 
 (defun smart-mode-scan-string (end &optional suggested-face) ; '.......'
   (smart-mode-scan* string () (looking-at "\\('\\)\\(\\(?:\\\\.\\|[^']\\)*\\)\\('\\)")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-string-face)
-    (put-text-property (match-beginning 1) (match-end 1) 'syntax-table (string-to-syntax "|"))
-    (put-text-property (match-beginning 3) (match-end 3) 'syntax-table (string-to-syntax "|"))
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-string-face)
+    (smart-text-property (match-beginning 1) (match-end 1) 'syntax-table (string-to-syntax "|"))
+    (smart-text-property (match-beginning 3) (match-end 3) 'syntax-table (string-to-syntax "|"))
     (goto-char (match-end 0))
     (setq step end result t))); defun
 
@@ -1971,7 +1997,7 @@
   (smart-mode-scan* compound
       ((lastpoint step) (pos))
       (looking-at "\"")
-    (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "("))
+    (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "("))
     (setq step (goto-char (match-end 0)))
     (while (and (< step end) (< (point) end) (not result))
       (cond
@@ -1980,36 +2006,36 @@
         (setq step (goto-char (match-end 0))))
        ((looking-at "[$&]")
         (if (< lastpoint (match-beginning 0))
-            (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-string-face))
+            (smart-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-string-face))
         (setq pos (match-end 0))
         (smart-mode-scan-call end suggested-face)
         (setq step (if (< pos (point)) (point) (goto-char pos))
               lastpoint (point)))
        ((looking-at "\""); the paired quote (ending)
-        (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
+        (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
         (goto-char (match-end 0))
         (setq step end result t)))); while
     (when (< lastpoint (point))
-      (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-string-face)))); defun
+      (smart-text-property lastpoint (point) 'font-lock-face 'smart-mode-string-face)))); defun
 
 (defun smart-mode-scan-glob (end &optional suggested-face) ; *.foo
   (smart-mode-scan* compound () (looking-at "\\*")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-glob-star-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-glob-star-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
 (defun smart-mode-scan-perc (end &optional suggested-face) ; %bar
   (smart-mode-scan* perc () (looking-at "%")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-perc-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-perc-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
 (defun smart-mode-scan-dot (end &optional suggested-face) ; .foo
   (smart-mode-scan* dot () (looking-at "\\.")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dot-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dot-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
 (defun smart-mode-scan-pcon (end &optional suggested-face) ; /foo
   (smart-mode-scan* pcon () (looking-at "/")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pcon-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pcon-face)
     (setq step (goto-char (match-end 0)) result t)
     (when (looking-at "/+"); continual pseg: ////
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "too many slashes")
@@ -2017,19 +2043,19 @@
 
 (defun smart-mode-scan-tilde (end &optional suggested-face) ; ~/foo
   (smart-mode-scan* tilde () (looking-at "[~]")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-tilde-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-tilde-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
 (defun smart-mode-scan-flag (end &optional suggested-face) ; -foo
   (smart-mode-scan* flag () (looking-at smart-mode-flag-regex)
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
-    (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face)
+    (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
+    (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face)
     (setq step (goto-char (match-end 0)) result t))); defun
 
 (defun smart-mode-scan-pair (end &optional suggested-face) ; -foo
   (smart-mode-scan* pair () (looking-at "=")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pair-sign-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-pair-sign-face)
     (setq step (goto-char (match-end 0)))
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
@@ -2047,7 +2073,7 @@
 
 (defun smart-mode-scan-sel (end &optional suggested-face) ; ->bar =>bar
   (smart-mode-scan* sel ((face suggested-face)) (looking-at smart-mode-selection-arrows)
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-arrow-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-arrow-face)
     (setq step (goto-char (match-end 0)))
     (when (looking-at (concat smart-mode-selection-arrows-nocapture "+")); continual arrows: -> =>
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid selection")
@@ -2066,15 +2092,15 @@
     (cond; TODO: $'foobar' $"foobar"
      ;; calling special delegations and closures: $@ $< $^ $% $* $1 ...
      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-call-char-regex))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-var-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-var-name-face)
       (setq step (goto-char (match-end 0))
             result t)); left = nil
      ;; calling delegations and closures variables: $(...
      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-call-var-regex))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face
                          (cond
                           ((string-match-p smart-mode-builtins-regex (match-string 3))
                            'smart-mode-call-builtin-face)
@@ -2084,17 +2110,17 @@
             left (match-string 2))); left = '('
      ;; calling delegations and closures rules: ${...
      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-call-rule-regex))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-call-rule-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-call-rule-name-face)
       (setq step (goto-char (match-end 0))
             left (match-string 2))); left = '{'
      ;; calling special features: $:foo -xxx -yyy:
      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-call-special-regex))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-call-sign-face)
       (if (string-match-p smart-mode-special-var-names-regex (match-string 3))
-          (put-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-call-special-face)
+          (smart-text-property (match-beginning 3) (match-end 3) 'font-lock-face 'smart-mode-call-special-face)
         (smart-mode-warning-region (match-beginning 3) (match-end 3) "unknown special variable: %s" (match-string 3)))
       (setq step (goto-char (match-end 0))
             left (match-string 2))); left = ':'
@@ -2131,7 +2157,7 @@
       ;;(smart-mode-scan-trace-i (concat tag "#4") end)
       (when (and (< step end) (looking-at right))
         (goto-char (match-end 0)); consumes the ')' '}' ':'
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-sign-face)
+        (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-sign-face)
         (setq step end result t))))); defun
 
 (defun smart-mode-scan-call-arguments (left right end)
@@ -2147,7 +2173,7 @@
          (setq step end result t)
        (while (and (not bad) (not result)
                    (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(,\\)\\(?:\\\\\n\\|[ \t]\\)*")); commas
-         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
+         (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-sign-face)
          (setq step (goto-char (match-end 0)))
          (if (smart-mode-scan-list end 'smart-mode-no-face stop)
              (if (looking-at right)
@@ -2156,7 +2182,7 @@
 
 (defun smart-mode-scan-group (end &optional suggested-face)
   (smart-mode-scan* group ((bad)) (looking-at "(")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
     (setq step (goto-char (match-end 0)))
     (and
      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
@@ -2165,17 +2191,17 @@
      (cond
       ((looking-at ")")
        ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+       (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
        (goto-char (match-end 0))
        (setq step end result t))
       ((while (and (not bad) (not result)
                    (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(,\\)\\(?:\\\\\n\\|[ \t]\\)*")); commas
          ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
-         (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
+         (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
          (setq step (goto-char (match-end 0)))
          (if (smart-mode-scan-list end 'smart-mode-no-face "[,)]")
              (when (looking-at ")"); the right paren ')'
-               (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
+               (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
                (goto-char (match-end 0))
                (setq step end result t))
            (setq bad t)))))); and
@@ -2197,9 +2223,9 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
       ;; (cond
       ;;  ((and (match-beginning 1) (match-beginning 2))
-      ;;   (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
-      ;;   (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face))
-      ;;  ((put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-flag-face)))
+      ;;   (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-flag-sign-face)
+      ;;   (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-flag-face))
+      ;;  ((smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-flag-face)))
       ;; (setq step (goto-char (match-end 0)))
       (smart-mode-scan-expr end 'smart-mode-no-face)
       (setq step (point)))
@@ -2230,7 +2256,7 @@
     (unless result
       (cond
        ((looking-at "\\(\\\\\\)\n"); continual lines
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+        (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
         (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (statement options): %s" (match-string 2))
@@ -2247,7 +2273,7 @@
     (cond
      ((looking-at "\\((\\)\\(?:\\\\\n\\|[ \t]\\)*"); ... ( #...
       ;;(smart-mode-scan-trace-i "statement-specs#1.1" end)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-paren-face)
       (setq step (goto-char (match-end 0))
             spec-begin step)
       (if (looking-at "#") (smart-mode-scan-comment end))
@@ -2268,9 +2294,9 @@
          (looking-at (if single "\\(?:\\\\\n\\|[ \t]\\)*[#\n]" "\n?)")))
       ;;(smart-mode-scan-trace-i "statement-specs#3" end)
       (unless single
-        (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face))
-      (put-text-property begin (match-end 0) 'smart-semantic stmt); Set stmt semantic first!
-      (put-text-property (1- spec-begin) (match-beginning 0) 'smart-semantic (make-symbol (concat "spec-" stmt)))
+        (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face))
+      (smart-text-property begin (match-end 0) 'smart-semantic stmt); Set stmt semantic first!
+      (smart-text-property (1- spec-begin) (match-beginning 0) 'smart-semantic (make-symbol (concat "spec-" stmt)))
       (goto-char (match-end 0)); just skip the endings
       (setq step end result t); Success: results t!
       (unless single
@@ -2323,7 +2349,7 @@
           (cond
            ((looking-back "\n"); Good!
             ;; FIXME 'comment is reset
-            (put-text-property pos (point) 'smart-semantic 'comment))
+            (smart-text-property pos (point) 'smart-semantic 'comment))
            ((looking-at "\\([^#)\n]+?\\)\\(?:\\\\\n\\|[ \t]\\)*")
             (smart-mode-warning-region (match-beginning 0) (match-end 0) "unscanned spec tailing comment (%s)" stmt)
             (setq step (goto-char (match-end 0)))))
@@ -2370,7 +2396,7 @@
       (smart-mode-warning-region (point) (line-end-position) "invalid files spec")
       (setq step (goto-char (line-end-position))))
     (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(=>\\|[⇒→⇢]\\)\\(?:\\\\\n\\|[ \t]\\)*")
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-arrow-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-arrow-face)
       (setq step (goto-char (match-end 0))))
     (unless (smart-mode-scan-expr end 'smart-mode-pseg-face)
       (smart-mode-warning-region (point) (line-end-position) "invalid files spec value")
@@ -2388,7 +2414,7 @@
        nil); Nil on failure to stop!
      (cond
       ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-assign-regex "\\(?:\\\\\n\\|[ \t]\\)*"))
-       (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
+       (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-assign-face)
        (setq step (goto-char (match-end 0)))
        (smart-mode-scan-list end 'smart-mode-no-face))
       (t
@@ -2400,13 +2426,13 @@
     (cond
      ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(eval\\)")
       ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'eval)
+      (smart-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'eval)
       (while (and (< spec (point-max))
                   (equal (get-text-property spec 'smart-semantic) 'eval-spec))
         (setq spec (1+ spec)))
       (setq step (goto-char (match-end 1))
             begin step)
-      (put-text-property begin spec 'smart-semantic 'spec-eval)
+      (smart-text-property begin spec 'smart-semantic 'spec-eval)
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
       (when (smart-mode-scan-spec-eval spec)
         (setq step (point) result t)))
@@ -2430,7 +2456,7 @@
       ;; Builtin commands
       ((looking-at smart-mode-builtins-regex)
        ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-       (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-builtin-face)
+       (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-call-builtin-face)
        (setq step (goto-char (match-end 0))))
       ;; User expressions: user->xxx +=
       ((looking-at (concat "\\(user\\)" smart-mode-selection-arrows-nocapture)); user=>  user->
@@ -2548,9 +2574,8 @@
     (when (looking-at "^\t")
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
       ;; Fix font face of the next recipe prefix.
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       t)
-    ;;(put-text-property begin end 'smart-message nil)
     (setq step end result t)))
 
 (defun smart-mode-scan-recipe (end &optional scan semi)
@@ -2568,9 +2593,9 @@
                nil)))
        ;; tabby recipe (list)
        ((looking-at "^\t")))
-    (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
-    (put-text-property (match-beginning 0) (match-end 0) 'smart-dialect dialect)
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
+    (smart-text-property (match-beginning 0) (match-end 0) 'smart-dialect dialect)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
     (setq step (goto-char (match-end 0)); '^\t' or ';'
           begin step)
     ;;(smart-mode-scan-trace-o (concat tag "#1") dialect end t)
@@ -2591,8 +2616,8 @@
             (and (looking-at "\n") (goto-char (match-end 0))))
         (progn
           ;;(smart-mode-scan-trace-o (concat tag "#3.1") dialect end t)
-          (put-text-property begin (point) 'smart-semantic 'recipe)
-          (put-text-property begin (point) 'smart-dialect (make-symbol dialect))
+          (smart-text-property begin (point) 'smart-semantic 'recipe)
+          (smart-text-property begin (point) 'smart-dialect (make-symbol dialect))
           (unless result
             (setq step end result t)))
       (smart-mode-scan-trace-o (concat tag "#3.2") dialect end t))
@@ -2611,23 +2636,23 @@
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-builtin-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-call-builtin-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; Unknown commands
      ((looking-at smart-mode-bareword-regex)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)
       (setq step (goto-char (match-end 0)) kind 'unknown))
      ;;
      ;; User expressions: user->xxx +=
      ((looking-at (concat "\\(user\\)\\(?:" smart-mode-selection-arrows-capture "\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
       ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
-      (smart-mode-match-set-face-goto 1 'font-lock-keyword-face)
+      (smart-match-property 1 1 'font-lock-face 'font-lock-keyword-face)
       (if (string-equal (match-string 2) "=>")
           (smart-mode-warning-region (match-beginning 2) (match-end 2) "unsupported selection: user=>%s" (buffer-substring (match-string 3)))
-        (smart-mode-match-set-face-goto 1 'smart-mode-assign-face))
-      (smart-mode-match-set-face-goto 3 'font-lock-variable-name-face)
-      (smart-mode-match-set-face-goto 4 'smart-mode-constant-face)
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face))
+      (smart-match-property 3 3 'font-lock-face 'font-lock-variable-name-face)
+      (smart-match-property 4 4 'font-lock-face 'smart-mode-constant-face)
       (smart-mode-match-remove-face-goto 5)
       (setq step (point) kind 'assign))
      ;;
@@ -2693,9 +2718,9 @@
   (smart-mode-scan** recipe-text ((pos)) (looking-at "[^\n]")
     (cond
      ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)"); escaping variables: \$foobar $$foobar
-      ;;(put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-text-punc-face)
-      ;;(put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-text-var-sign-face)
-      (put-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-text-punc-face)
+      ;;(smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-text-punc-face)
+      ;;(smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-text-var-sign-face)
+      (smart-text-property (match-beginning 1) (match-end 2) 'font-lock-face 'smart-mode-text-punc-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[$&]"); $ &
       (setq pos (match-end 0)); save the end point
@@ -2706,7 +2731,7 @@
            (not (and (looking-back "[^\\\\][$&]")
                      (looking-at smart-mode-var-char-regex)))
            (looking-at "\\(?:[{(<|>)}:!?,/-]\\|\\s.\\|\\]\\|\\[\\)+"))
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-text-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-text-punc-face)
       (setq step (goto-char (match-end 0))))
      ((setq step (goto-char (1+ (point))))))
     t)); defun
@@ -2739,8 +2764,8 @@
   (smart-mode-scan** cc () (looking-at "[^\n]")
     (cond
      ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
-      (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
      ((and (looking-back "^\t") (looking-at "#"))
       (smart-mode-scan-cc-preprocessor 'c++ end)
@@ -2769,16 +2794,16 @@
                (smart-mode-scan-combine end 'smart-mode-no-face)))
      ((and (not (looking-at "[$&#]\\|\\\\[$]"))
            (looking-at "\\(?:[(|)]\\|\\s.\\)+"))
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at (concat smart-mode-c++-identifier-regex "[ \t\n]+"
                           smart-mode-c++-identifier-regex "[ \t\n]+"
                           "\\((\\)"))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face)
-      (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-c++-function-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face)
+      (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-c++-function-name-face)
       (setq step (goto-char (match-beginning 3))))
      ((looking-at (concat smart-mode-c++-keywords-regex "[ \t\n]*"))
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\([^\n]+\\)")
       (smart-mode-warning-region (match-beginning 1) (match-end 1) "%s" (match-string 1))
@@ -2791,7 +2816,7 @@
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "$"); end of scanning
-          (put-text-property beg (match-beginning 0) 'font-lock-face 'smart-mode-comment-face)
+          (smart-text-property beg (match-beginning 0) 'font-lock-face 'smart-mode-comment-face)
           (goto-char (match-end 0))
           (setq step end))
          ((setq step (goto-char (1+ (point))))))))))
@@ -2803,23 +2828,23 @@
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "*/"); end of scanning
-          (put-text-property beg (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+          (smart-text-property beg (match-end 0) 'font-lock-face 'smart-mode-comment-face)
           (goto-char (match-end 0))
           (setq step end))
          ((setq step (goto-char (1+ (point))))))))))
 
 (defun smart-mode-scan-cc-string (lang end)
   (when (looking-at "\"")
-    (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "|"))
-    ;;(put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "|"))
+    ;;(smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
     (let ((beg (match-beginning 0)) (step (goto-char (match-end 0))))
       (while (and (< step end) (< (point) end))
         (cond
          ((looking-at "\\\\\""); escaping \"
           (setq step (goto-char (match-end 0))))
          ((looking-at "\""); end of scanning string
-          (put-text-property (match-beginning 0) (1+ (match-end 0)) 'syntax-table (string-to-syntax "|"))
-          (put-text-property beg (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
+          (smart-text-property (match-beginning 0) (1+ (match-end 0)) 'syntax-table (string-to-syntax "|"))
+          (smart-text-property beg (match-end 0) 'font-lock-face 'smart-mode-c++-string-face)
           (goto-char (match-end 0))
           (setq step end))
          ((setq step (goto-char (1+ (point))))))))))
@@ -2835,37 +2860,37 @@
           (goto-char (match-end 0))
           (setq step end))
          ((and (looking-back "^\t") (looking-at "#"))
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-preprocessor-face)
+          (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-preprocessor-face)
           (setq step (goto-char (match-end 0))))
          ((looking-at "\"")
           (smart-mode-scan-cc-string lang end)
           (setq step (if (< step (point)) (point) (1+ step))))
          ((looking-at smart-mode-c++-identifier-regex)
           (if name; already scanned and cached name
-              (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-macro-name-face)
+              (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-macro-name-face)
             (setq name (match-string 1)); cache name
             (if (string-match-p smart-mode-c++-preprocessors-regex name)
-                (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-preprocessor-face)
+                (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-preprocessor-face)
               (smart-mode-warning-region (match-beginning 1) (match-end 1) "unknown preprocessor: %s" name))); if
           (setq step (goto-char (match-end 0))))
          ((setq step (goto-char (1+ (point))))))))))
 
 (defun smart-mode-scan-cc-record (lang end)
   (when (looking-at "\\(class\\|struct\\)[^[:alnum:]_]")
-    (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
+    (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
     (let ((beg (match-beginning 1)) (step (goto-char (match-end 1)))
           (kind (match-string 1)) (name) (pos))
       (while (and (< (point) end) (< step end))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
-          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          (smart-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+          (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
          ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
           (setq step (goto-char (match-end 0))))
          ((looking-at ";"); end of scanning
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+          (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
           (goto-char (match-end 0))
           (setq step end))
          ((looking-at "__attribute__")
@@ -2876,12 +2901,12 @@
          ((looking-at (concat smart-mode-c++-identifier-regex "[^[:alnum:]_]"))
           (cond
            ((string-match-p smart-mode-c++-keywords-regex (match-string 1))
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face))
+            (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face))
            ((not name)
             (setq name (match-string 1)); cache the record name
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face))
+            (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face))
            ((and name); already scanned and cached name
-            (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)))
+            (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-warning-face)))
           (setq step (goto-char (match-end 1))))
          ((looking-at "{")
           (setq pos (match-end 0))
@@ -2891,7 +2916,7 @@
 
 (defun smart-mode-scan-cc-record-body (lang name end)
   (when (looking-at "{")
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
     (let ((beg (match-beginning 0)) (step (goto-char (match-end 0)))
           (member-type-beg) (member-type-end); all
           (member-name-beg) (member-name-end); functions, variables, types
@@ -2899,14 +2924,14 @@
           (member-body-beg) (member-body-end); functions, inner-records
           (stop))
       (when (looking-at "\n\\(\t\\)"); continue with the next recipe
-        (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+        (smart-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+        (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
         (setq step (goto-char (match-end 0))))
       (while (and (< step end) (< (point) end) (< (point) (point-max)))
         (cond
          ((and (looking-at "\n\\(\t\\)")); continue with the next recipe
-          (put-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+          (smart-text-property (match-beginning 1) (match-end 1) 'smart-semantic 'recipe-prefix)
+          (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
          ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
@@ -2914,25 +2939,25 @@
          ((looking-at ";")
           (cond
            ((and stop); ends scanning by ';' (after stop '}')
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (goto-char (match-end 0))
             (setq step end))
            ((and (not member-para-beg) member-name-beg member-name-end)
-            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-var-name-face)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+            (smart-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-var-name-face)
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-name-beg nil member-name-end nil
                   step (goto-char (match-end 0))))
            ((and member-para-beg member-para-end member-name-beg member-name-end)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-name-beg nil member-name-end nil
                   member-para-beg nil member-para-end nil
                   step (goto-char (match-end 0))))
            ((setq step (goto-char (match-end 0)))
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face))))
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face))))
          ((looking-at "(")
           (cond
            ((and member-name-beg member-name-end (not member-para-beg))
-            (put-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-function-name-face)
+            (smart-text-property member-name-beg member-name-end 'font-lock-face 'smart-mode-c++-function-name-face)
             (setq member-para-beg (match-beginning 0))))
           (setq step (goto-char (match-end 0))))
          ((looking-at ")")
@@ -2945,20 +2970,20 @@
          ((looking-at "}"); ending of the record (still looking for ';')
           (cond
            ((and member-body-beg)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq member-body-end (match-end 0)))
            ((not member-body-beg)
-            (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
+            (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-c++-punc-face)
             (setq stop (match-end 0)))
-           ((put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)))
+           ((smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)))
           (setq step (goto-char (match-end 0))))
          ((and (equal lang 'c++)
                (looking-at (concat "\\(private\\|protected\\|public\\)\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)")))
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
+          (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-keyword-face)
           (setq step (goto-char (match-end 0))))
          ((or (looking-at (concat smart-mode-c++-types-regex "\\(?:\\\\\n\\|[ \t]\\)*"))
               (and name (looking-at (concat "\\(" name "\\)\\(?:\\\\\n\\|[ \t]\\)*"))))
-          (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face)
+          (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-c++-type-face)
           (setq member-type-beg (match-beginning 1) member-type-end (match-end 1)
                 step (goto-char (match-end 0)))
           ;; record member name
@@ -3003,8 +3028,8 @@
      ;;((and (looking-back "^") (looking-at "\t")); recipe tab prefix
      ((looking-at "^\t"); recipe tab prefix
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'smart-semantic 'recipe-prefix)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[ \t]+"); spaces - "\\(?:\\\\\n\\|[ \t]\\)+"
       ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
@@ -3018,26 +3043,26 @@
             (and (looking-back ";\\(?:\\\\\n\\|[ \t]\\)*")
                  (looking-at "\\(@\\)")))))
       ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\n"); continual lines: \\\n
       ;;(smart-mode-scan-trace-i (concat tag "#1.4") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "&&"); scan the &&
       ;;(smart-mode-scan-trace-i (concat tag "#1.5") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))
             face 'smart-mode-bash-command-name-face))
      ((looking-at "\\(\\\\\\|\\$\\)[$]"); bash variables: \$foobar $$foobar
       ;;(smart-mode-scan-trace-i (concat tag "#1.6") end t)
-      (put-text-property (match-beginning 1) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
+      (smart-text-property (match-beginning 1) (match-end 0) 'font-lock-face 'smart-mode-comment-face)
       (setq step (goto-char (match-end 1)))
       (smart-mode-scan-bash-varef end)
       (setq step (point)))
      ((looking-at "/[^/$ \t\n]*")
       ;;(smart-mode-scan-trace-i (concat tag "#1.7") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "['\"]")
       ;;(smart-mode-scan-trace-i (concat tag "#1.8") end t)
@@ -3057,23 +3082,23 @@
       (setq step (point)))
      ((looking-at (concat smart-mode-bash-builtins-regex "\\s-"))
       ;;(smart-mode-scan-trace-i (concat tag "#1.12") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-builtin-name-face)
       (setq step (goto-char (match-end 0))
             face 'smart-mode-no-face))
      ((looking-at smart-mode-bash-keywords-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#1.13") end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-bash-keyword-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[[:alpha:]_][[:alnum:]_+-]*")
       ;;(smart-mode-scan-trace-i (concat tag "#1.14") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0)))
       (unless (looking-at "/")
         (setq face 'smart-mode-no-face)))
      ((and (not (looking-at "[$&#]\\|\\\\[$]"))
            (looking-at "\\(?:[{(|)}+-]\\|\\s.\\)+"))
       ;;(smart-mode-scan-trace-i (concat tag "#1.15") end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))))
      (t
       ;;(smart-mode-scan-trace-i (concat tag "#1.x") end t)
@@ -3083,7 +3108,7 @@
 
 (defun smart-mode-scan-bash-string (quote end)
   (smart-mode-scan* bash-string ((lastpoint step) (pos)) (looking-at quote)
-    (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "("))
+    (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax "("))
     (setq step (goto-char (match-end 0)))
     (while (and (< step end) (< (point) end) (not result))
       (cond
@@ -3092,9 +3117,9 @@
         (setq step (goto-char (match-end 0))))
        ((and (string= quote "\"") (looking-at "\\(\\$\\)\\(\\$\\)"))
         (if (< lastpoint (match-beginning 0))
-            (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
-        (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
-        (put-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-string-face)
+            (smart-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
+        (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-comment-face)
+        (smart-text-property (match-beginning 2) (match-end 2) 'font-lock-face 'smart-mode-bash-string-face)
         (setq step (goto-char (match-end 1)))
         (smart-mode-scan-bash-varef end)
         (setq step (point) lastpoint step))
@@ -3102,27 +3127,27 @@
         (setq step (goto-char (match-end 0))))
        ((looking-at "[$&]")
         (if (< lastpoint (match-beginning 0))
-            (put-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
+            (smart-text-property lastpoint (match-beginning 0) 'font-lock-face 'smart-mode-bash-string-face))
         (setq pos (match-end 0))
         (smart-mode-scan-call end 'smart-mode-no-face)
         (setq step (if (< pos (point)) (point) (goto-char pos))
               lastpoint (point)))
        ((looking-at quote); the paired quote (ending)
-        (put-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
+        (smart-text-property (match-beginning 0) (match-end 0) 'syntax-table (string-to-syntax ")"))
         (goto-char (match-end 0))
         (setq step end result t)))); while
     (when (< lastpoint (point))
-      (put-text-property lastpoint (point) 'font-lock-face 'smart-mode-bash-string-face)))); defun
+      (smart-text-property lastpoint (point) 'font-lock-face 'smart-mode-bash-string-face)))); defun
 
 (defun smart-mode-scan-bash-varef (end); variable references:  \$foobar $$foobar \$(cmd ...)
   (smart-mode-scan* bash-varef
       ((lastpoint step) (pos))
       (looking-at "[$]");"\\(\\\\\\|\\$\\)\\([$]\\)"
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-sign-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-sign-face)
     (setq step (goto-char (match-end 0)))
     (cond
      ((looking-at "\\w+"); variable name: $foobar
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
       (setq step (goto-char (match-end 0))
             result t))
      ((looking-at "{"); parameter substitution: ${...}
@@ -3132,7 +3157,7 @@
       (setq result (smart-mode-scan-bash-subshell end)
             step (point)))
      ((looking-at ".")
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-warning-face)
       (setq step (goto-char (match-end 0))
             result t))))); defun
 
@@ -3140,7 +3165,7 @@
   "See http://tldp.org/LDP/abs/html/parameter-substitution.html"
   (when (looking-at "{")
     ;;(message "substitution: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
     (setq step (goto-char (match-end 0)))
     (let ((step (point)))
       (while (and (< step end) (< (point) end))
@@ -3150,7 +3175,7 @@
          ;;  (smart-mode-scan-bash-substitution)
          ;;  (setq step (if (< step (point)) (point) (1+ step))))
          ((looking-at "[}]"); the end!
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+          (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
           (setq step (goto-char end)))
          ;; ${parameter}
          ;; ${parameter-default}, ${parameter:-default}
@@ -3168,22 +3193,22 @@
          ;; ${var/%Pattern/Replacement}
          ;; ${!varprefix*}, ${!varprefix@}
          ((looking-at "[^{:\\-=+?}]+")
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
+          (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-var-name-face)
           (setq step (goto-char (match-end 0))))
          ((looking-at "[^}]+")
-          (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-substitution-face)
+          (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-substitution-face)
           (setq step (goto-char (match-end 0)))))))
     t))
 
 (defun smart-mode-scan-bash-subshell (end)
   (when (looking-at "(")
     ;;(message "subshell: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
-    (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+    (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
     (setq step (goto-char (match-end 0)))
     (smart-mode-scan-recipe-bash end ")")
     (when (looking-at ")"); Good!
       ;;(message "subshell: (%s) %s" (point) (buffer-substring (point) (line-end-position)))
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-bash-punc-face)
       (setq step (goto-char (match-end 0))))))
 
 (defun smart-mode-scan-recipe-python (end)
@@ -3220,12 +3245,12 @@
     (cond
      ((looking-at "^\\(\t\\)\\(?:\\\\\n\\|[ \t]\\)*"); the beginning tap
       ;;(smart-mode-scan-trace-o (concat tag "#2.0") context end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-recipe-prefix-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\|\\$\\)\\([$]\\)\\([[:alpha:]_][[:alnum:]_]*\\)"); escaping variables: \$foobar $$foobar
       ;;(smart-mode-scan-trace-o (concat tag "#2.1") context end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-punc-face)
-      (put-text-property (match-beginning 2) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+      (smart-text-property (match-beginning 2) (match-end 3) 'font-lock-face 'smart-mode-dockerfile-env-name-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\$\\$\\|&&"); $$ &&
       ;;(smart-mode-scan-trace-o (concat tag "#2.2") context end t)
@@ -3243,20 +3268,20 @@
      ((and (looking-back "^\t\\(?:\\\\\n\\|[ \t]\\)*"); at the beginning
            (looking-at (concat smart-mode-dockerfile-keywords-regex "\\(?:\\\\\n\\|[ \t]\\)+")))
       ;;(smart-mode-scan-trace-o (concat tag "#2.5") context end t)
-      (put-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
+      (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-dockerfile-keyword-face)
       (setq step (goto-char (match-end 0)) context (match-string 1))
       (if (string= (match-string 1) 'RUN)
           (smart-mode-scan-recipe-bash end)))
      ((looking-at ":")
       ;;(smart-mode-scan-trace-o (concat tag "#2.6") context end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
       (setq step (goto-char (match-end 0)))
       (cond
        ((string= context 'FROM) (setq context 'FROM-version))
        ((string= context 'USER) (setq context 'USER-pass))))
      ((looking-at "=")
       ;;(smart-mode-scan-trace-o (concat tag "#2.7") context end t)
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-dockerfile-punc-face)
       (setq step (goto-char (match-end 0)))
       (cond
        ((string= context 'ENV) (setq context 'ENV-value))))
@@ -3271,7 +3296,7 @@
        ((string= context 'USER-pass) (setq face 'smart-mode-dockerfile-string-face))
        ((string= context 'MAINTAINER) (setq face 'smart-mode-dockerfile-string-face))
        ((setq face 'smart-mode-no-face)))
-      (put-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
+      (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face face)
       (setq step (goto-char (match-end 0))))
      ((looking-at "[^\n]+")
       ;;(smart-mode-scan-trace-o (concat tag "#2.9") context end t)
@@ -3442,7 +3467,7 @@ Returns `t' if there's a next dependency line, or nil."
          (str (smart-mode-newline-string semantic)) (begin (point)))
     (when (and str (not (string= str "")))
       (insert str); insert the string of 'newline'
-      ;;(put-text-property begin (point) 'smart-semantic 'project-options)
+      ;;(smart-text-property begin (point) 'smart-semantic 'project-options)
       (cond; go backward at the right point for quick editing
        ((string-suffix-p " \\" str) (backward-char 2))
        ((string-suffix-p "\\" str) (backward-char 1))))))
@@ -3567,11 +3592,11 @@ Returns `t' if there's a next dependency line, or nil."
     (insert "\n"); start a new line, don't use (newline) to avoid unnecessary indent
     (setq beg (point))
     (insert "\t"); insert tab
-    ;;(put-text-property beg (point) 'smart-semantic 'recipe-prefix)
+    ;;(smart-text-property beg (point) 'smart-semantic 'recipe-prefix)
     ;;(setq beg (point))
     (setq end (1+ (point)))
-    ;;(put-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
-    ;;(put-text-property beg end 'smart-dialect (make-symbol dialect))
+    ;;(smart-text-property beg end 'smart-semantic 'recipe) ;; FIXME: include \n
+    ;;(smart-text-property beg end 'smart-dialect (make-symbol dialect))
     ;;;; FIXME: let scanner handle with overlays
     ;;(smart-mode-put-recipe-overlays beg end)
     ))
@@ -3604,8 +3629,8 @@ Returns `t' if there's a next dependency line, or nil."
           (save-excursion (insert " \\"))))
 
     ;; Put recipe overlays
-    (put-text-property beg end 'smart-semantic 'recipe)
-    (put-text-property beg end 'smart-dialect 'shell)
+    (smart-text-property beg end 'smart-semantic 'recipe)
+    (smart-text-property beg end 'smart-dialect 'shell)
     ;;;; FIXME: let scanner handle with overlays
     ;;(smart-mode-put-recipe-overlays beg end)
     ))
