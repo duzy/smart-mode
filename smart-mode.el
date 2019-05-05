@@ -1054,8 +1054,20 @@
        ((string= sema 'assign-values)
         ;;(smart-mode-scan-trace-o "#0.2" sema end t)
         (smart-mode-scan-assign-values end t))
+       ((string= sema 'spec-import)
+        ;;(smart-mode-scan-trace-o "#0.3" sema end t)
+        (smart-mode-scan-spec-import end t))
+       ((string= sema 'spec-files)
+        ;;(smart-mode-scan-trace-o "#0.4" sema end t)
+        (smart-mode-scan-spec-files end t))
+       ((string= sema 'spec-configuration)
+        ;;(smart-mode-scan-trace-o "#0.5" sema end t)
+        (smart-mode-scan-spec-configuration end t))
+       ((string= sema 'spec-eval)
+        ;;(smart-mode-scan-trace-o "#0.6" sema end t)
+        (smart-mode-scan-spec-eval end t))
        (nil
-        (smart-mode-scan-trace-o "#0.3" sema end t)))))
+        (smart-mode-scan-trace-o "#0.x" sema end t)))))
     ;;(smart-mode-scan-trace-o "#1" sema end t)
     ;;
     ;; scan all text
@@ -2368,7 +2380,7 @@
       (if (looking-at ")")
           (setq step end result t))))); defun
 
-(defun smart-mode-scan-spec-import (end)
+(defun smart-mode-scan-spec-import (end &optional continue)
   (smart-mode-scan* spec-import () (looking-at "[^\n]")
     ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:import\\)?\\(?:\\\\\n\\|[ \t]\\)*")
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
@@ -2388,7 +2400,7 @@
       (smart-mode-warning-region (point) (line-end-position) "unterminated import spec")
       (setq step (goto-char (line-end-position)))))); defun
 
-(defun smart-mode-scan-spec-files (end)
+(defun smart-mode-scan-spec-files (end &optional continue)
   (smart-mode-scan* spec-files
       ()
       (looking-at "[^\n]");(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:files\\)?\\(?:\\\\\n\\|[ \t]\\)*")
@@ -2404,7 +2416,7 @@
       (setq step (goto-char (line-end-position))))
     (setq result t)))
 
-(defun smart-mode-scan-spec-configuration (end)
+(defun smart-mode-scan-spec-configuration (end &optional continue)
   (smart-mode-scan* spec-configuration () (looking-at "[^\n]")
     ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:configuration\\)?\\(?:\\\\\n\\|[ \t]\\)*")
     (and
@@ -2443,7 +2455,7 @@
       (setq step end)
       nil))))
 
-(defun smart-mode-scan-spec-eval (end)
+(defun smart-mode-scan-spec-eval (end &optional continue)
   (while (and (< end (point-max))
               (equal (get-text-property end 'smart-semantic) 'eval-spec))
     (setq end (1+ end)))
