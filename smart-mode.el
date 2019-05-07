@@ -311,7 +311,7 @@
     "filter" "filter-out" "encode-base64" "decode-base64" "base"
     "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
-    "truncate" "link" "symlink" "configure-file"
+    "truncate" "link" "symlink" "configure-file" "file"
     "wildcard" "read-dir" "read-file" "write-file"
     "error" "warning" "or" "and")
   "List of names understood by smart as builtins.")
@@ -2770,7 +2770,7 @@
   (smart-mode-scan** cc () (looking-at "[^\n]")
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
-     ((looking-at "^[ ]*[#\n]")
+     ((or (looking-at "^[ ]*[#\n]") (looking-at "\n[ ]*[#\n]"))
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
       (setq step end result t))
      ((and (looking-back "^") (looking-at "\t")); recipe tab prefix
@@ -2829,7 +2829,7 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1.12") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 1) "%s" (match-string 1))
       (setq step (goto-char (match-end 0)))))
-    (when (looking-at "^[ ]*[#\n]")
+    (when (and (not result) (looking-at "^[ ]*[#\n]"))
       (smart-mode-scan-trace-i (concat tag "#1.x") end t)
       (setq step end result t))))
 
