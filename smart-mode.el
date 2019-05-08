@@ -2711,10 +2711,14 @@
         t)
        ((smart-mode-scan-trace-o (concat tag "#3.4") kind end t)))); when
     ;; any unscaned characters
-    (when (looking-at "[^\n]+")
+    (cond
+     ((looking-at "#")
+      (smart-mode-scan-comment end)
+      (setq step (point)))
+     ((looking-at "[^\n]+")
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin expressions: %s" (match-string 0))
-      (setq step (goto-char (match-end 0)))); when
+      (setq step (goto-char (match-end 0))))); cond
     ;;
     (when (< step end)
       (cond; Note that the line feed at the end is remained!
