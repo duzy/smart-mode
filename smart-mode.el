@@ -1720,6 +1720,9 @@
         (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at ")") (setq step end result t))
+     ((looking-at ",");smart-mode-call-comma-face
+      (smart-match-property 0 0 'font-lock-face 'smart-mode-call-comma-face)
+      (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\n"); continual lines
       (smart-text-property (match-beginning 1) (match-end 1) 'font-lock-face 'smart-mode-escape-slash-face)
       (setq step (goto-char (match-end 0))))
