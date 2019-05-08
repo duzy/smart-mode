@@ -2639,6 +2639,12 @@
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
      ;;
+     ;; Special commands
+     ((looking-at "\\(\\<return\\>\\)")
+      ;;(smart-mode-scan-trace-i (concat tag "#2.0") end t)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-call-special-face)
+      (setq step (goto-char (match-end 0)) kind 'builtin))
+     ;;
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
