@@ -1309,7 +1309,7 @@
       (or continue
           (if (looking-back (concat "[ \t]*" smart-mode-assign-regex))
               (setq begin (match-end 1))))
-    (smart-mode-scan-trace-i (concat tag "#0") end t)
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (setq step (goto-char (match-end 0)))
     (if (looking-at "[ \t]+"); spaces
         (setq step (goto-char (match-end 0))))
@@ -1331,7 +1331,7 @@
       ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
       (setq step end result t)))
     (smart-text-property begin (point) 'smart-semantic 'assign-values)
-    (smart-mode-scan-trace-o (concat tag "#4") (format "%s %s %s" (point) step result) end t)
+    ;;(smart-mode-scan-trace-o (concat tag "#4") (format "%s %s %s" (point) step result) end t)
     (if (and (not result) (or (<= end step) (<= end (point))))
         (setq step end result t))))
 
