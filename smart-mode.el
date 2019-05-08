@@ -2639,26 +2639,33 @@
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
      ;;
+     ;; Constant values
+     ((looking-at "\\(\\<true\\|false\\|yes\\|no\\>\\)")
+      ;;(smart-mode-scan-trace-i (concat tag "#2.0") end t)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-constant-face)
+      (setq step (goto-char (match-end 0)) kind 'builtin))
+     ;;
      ;; Special commands
      ((looking-at "\\(\\<return\\>\\)")
-      ;;(smart-mode-scan-trace-i (concat tag "#2.0") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-call-special-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
-      ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-call-builtin-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; Unknown commands
      ((looking-at smart-mode-bareword-regex)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-warning-face)
       (setq step (goto-char (match-end 0)) kind 'unknown))
      ;;
      ;; User expressions: user->xxx +=
      ((looking-at (concat "\\(user\\)\\(?:" smart-mode-selection-arrows-capture "\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
-      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.4") end t)
       (smart-match-property 1 1 'font-lock-face 'font-lock-keyword-face)
       (if (string-equal (match-string 2) "=>")
           (smart-mode-warning-region (match-beginning 2) (match-end 2) "unsupported selection: user=>%s" (buffer-substring (match-string 3)))
@@ -2670,11 +2677,11 @@
      ;;
      ;; Value expressions.
      ((and (setq pos (point)) (smart-mode-scan-expr end 'smart-mode-no-face))
-      ;;(smart-mode-scan-trace-o (concat tag "#2.3") (buffer-substring pos (point)) end t)
+      ;;(smart-mode-scan-trace-o (concat tag "#2.5") (buffer-substring pos (point)) end t)
       (setq step (point) kind 'value))
      ;; Invalid command expresions
      ((looking-at "[^ \t#\n]+")
-      ;;(smart-mode-scan-trace-i (concat tag "#2.4") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.6") end t)
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); cond
     ;; skip spaces
