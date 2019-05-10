@@ -1085,6 +1085,10 @@
              ((looking-at (concat "^" rx-recipe))
               ;;(smart-mode-scan-trace-o "#0.7.2.1" sema end t)
               (smart-mode-scan-recipes nil end)))))))
+       ((string= sema 'modifiers)
+        ;;(smart-mode-scan-trace-o "#0.8" sema end t)
+        (setq smart-mode-scan-dialect dia)
+        (smart-mode-scan-modifiers end t))
        (nil
         (smart-mode-scan-trace-o "#0.x" sema end t)))))
     ;;(smart-mode-scan-trace-o "#1" sema end t)
@@ -1487,23 +1491,58 @@
       (if (not (looking-at "\\(?:\\\\\n\\|[ \t]\\)*:")); not just a ':' at the beginning
           (smart-mode-scan-expr end 'smart-mode-call-rule-name-face))
       (goto-char step))
+
+    (if (smart-mode-scan-modifiers end)
+        (progn
+          ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
+          ); good
+      (smart-mode-scan-trace-i (concat tag "#1.2") end t))
+    (setq step (point) result t)))
+
+(defun smart-mode-scan-modifiers (end &optional continue)
+  ;;(smart-mode-scan-trace-o "modifiers#a.0" continue end t)
+  (while (and (< end (point-max))
+              (let ((sema (get-text-property end 'smart-semantic)))
+                (or (equal sema 'rule-colon)
+                    (equal sema 'parameters)
+                    (equal sema 'modifiers)
+                    (equal sema 'modifier))))
+    (setq end (1+ end)))
+  ;;(smart-mode-scan-trace-o "modifiers#a.1" continue end t)
+  (smart-mode-scan* modifiers
+      ()
+      (cond
+       (continue)
+       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)")
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-modifier-left-brack-face)
+        (smart-match-property 1 1 'smart-semantic 'modifiers)
+        (setq step (goto-char (match-end 1))))); "\\["
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
+    (smart-mode-scan-modifier-list end)
+    (cond
+     ((looking-back "\\]") ; after ]
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
+      (setq step end result t))
+     ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\]\\)") ; ]
+      ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
+      (goto-char (match-end 1))
+      (setq step end result t))
+     (t
+      ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
+      (smart-mode-warning-region (point) (line-end-position) "expecting ']' (modifiers)")))
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+    (when (and (not result) (<= end step))
+      (smart-mode-scan-trace-i (concat tag "#3") end t)
+      (setq step end result t)))
+  ;;
+  ;; continue scanning after modifiers
+  (smart-mode-scan* modifiers-after () t
     ;;
-    ;; scan the optional modifiers
-    (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)"); the '[' brack
-      (setq step (goto-char (match-beginning 1))); skip spaces
-      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-      (if (smart-mode-scan-modifiers end)
-          (progn
-            ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-            ); good
-        (smart-mode-scan-trace-i (concat tag "#1.2") end t))
-      (setq step (point))
-      ;; the optional colon ':' after ']'
-      (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)"); :
-        ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
-        (smart-match-property 1 1 'font-lock-face 'smart-mode-rule-colon-face)
-        (setq step (goto-char (match-end 0))
-              begin step)))
+    ;; scan the optional colon ':' after ']'
+    (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)"); :
+      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-rule-colon-face)
+      (goto-char (match-end 0)))
     ;;
     ;; skip spaces but not '\\\n'
     (if (and (< step end) (looking-at "[ \t]+")); spaces ;"\\(?:\\\\\n\\|[ \t]\\)+"
@@ -1575,39 +1614,6 @@
       (smart-mode-scan-trace-i (concat tag "#x") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 1) "unscanned recipe: %s" (match-string 1))
       (setq step (goto-char (match-end 0))))))
-
-(defun smart-mode-scan-modifiers (end)
-  ;;(smart-mode-scan-trace-i "modifiers#" end t)
-  (while (and (< end (point-max))
-              (let ((sema (get-text-property end 'smart-semantic)))
-                (or (equal sema 'rule-colon)
-                    (equal sema 'parameters)
-                    (equal sema 'modifiers)
-                    (equal sema 'modifier))))
-    (setq end (1+ end)))
-  (smart-mode-scan* modifiers
-      ()
-      (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)"); "\\["
-    (smart-match-property 1 1 'font-lock-face 'smart-mode-modifier-left-brack-face)
-    (smart-match-property 1 1 'smart-semantic 'modifiers)
-    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (setq step (goto-char (match-end 1)))
-    (smart-mode-scan-modifier-list end)
-    (cond
-     ((looking-back "\\]") ; after ]
-      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-      (setq step end result t))
-     ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\]\\)") ; ]
-      ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
-      (goto-char (match-end 1))
-      (setq step end result t))
-     (t
-      ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
-      (smart-mode-warning-region (point) (line-end-position) "expecting ']' (modifiers)")))
-    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (when (and (not result) (<= end step))
-      (smart-mode-scan-trace-i (concat tag "#3") end t)
-      (setq step end result t))))
 
 (defun smart-mode-scan-modifier-list (end)
   (smart-mode-scan** modifier-list
