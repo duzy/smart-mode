@@ -1076,15 +1076,7 @@
           (smart-mode-scan-recipes nil end))
          (t
           ;;(smart-mode-scan-trace-o "#0.7.2" sema end t)
-          (smart-mode-scan-dependencies end t)
-          (when (< (point) end)
-            ;;(smart-mode-scan-trace-o "#0.7.2.0" sema end t)
-            (if (looking-at "\n")
-                (goto-char (match-end 0)))
-            (cond
-             ((looking-at (concat "^" rx-recipe))
-              ;;(smart-mode-scan-trace-o "#0.7.2.1" sema end t)
-              (smart-mode-scan-recipes nil end)))))))
+          (smart-mode-scan-dependencies end t))))
        ((string= sema 'modifiers)
         ;;(smart-mode-scan-trace-o "#0.8" sema end t)
         (setq smart-mode-scan-dialect dia)
@@ -1491,13 +1483,10 @@
       (if (not (looking-at "\\(?:\\\\\n\\|[ \t]\\)*:")); not just a ':' at the beginning
           (smart-mode-scan-expr end 'smart-mode-call-rule-name-face))
       (goto-char step))
-
-    (if (smart-mode-scan-modifiers end)
-        (progn
-          ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-          ); good
-      (smart-mode-scan-trace-i (concat tag "#1.2") end t))
-    (setq step (point) result t)))
+    ;;
+    ;; scan modifiers, dependencies and recipes
+    (smart-mode-scan-modifiers end)
+    (setq step (point) result (<= end step))))
 
 (defun smart-mode-scan-modifiers (end &optional continue)
   ;;(smart-mode-scan-trace-o "modifiers#a.0" continue end t)
@@ -1517,7 +1506,7 @@
         (smart-match-property 1 1 'font-lock-face 'smart-mode-modifier-left-brack-face)
         (smart-match-property 1 1 'smart-semantic 'modifiers)
         (setq step (goto-char (match-end 1))))); "\\["
-    (smart-mode-scan-trace-i (concat tag "#0") end t)
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (smart-mode-scan-modifier-list end)
     (cond
      ((looking-back "\\]") ; after ]
@@ -1536,7 +1525,7 @@
       (setq step end result t)))
   ;;
   ;; continue scanning after modifiers
-  (smart-mode-scan* modifiers-after () t
+  (smart-mode-scan* after-modifiers ((begin)) t
     ;;
     ;; scan the optional colon ':' after ']'
     (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)"); :
@@ -1548,72 +1537,9 @@
     (if (and (< step end) (looking-at "[ \t]+")); spaces ;"\\(?:\\\\\n\\|[ \t]\\)+"
         (setq step (goto-char (match-end 0))))
     ;;
-    ;; scan the optional dependencies
-    (when (and (< step end) (looking-at "[^;#\n]"))
-      ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-      (if (smart-mode-scan-dependencies end)
-          (progn
-            ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
-            (smart-text-property begin (point) 'smart-dialect smart-mode-scan-dialect)
-            (smart-text-property begin (point) 'smart-semantic 'dependencies))
-        ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
-        )
-      (setq step (point))); when
-    ;;
-    ;; unscanned dependencies characters
-    (when (and (< step end) (looking-at "\\([^;#\n]+\\)"))
-      (smart-mode-scan-trace-i (concat tag "#3") end t)
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid dependencies: %s" (match-string 1))
-      (setq step (goto-char (match-end 0))))
-    ;;
-    ;; scan the tailing comment if precented
-    (when (and (< step end) (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(#\\)"))
-      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (setq step (goto-char (match-beginning 1)))
-      (if (smart-mode-scan-comment end)
-          (progn
-            ;;(smart-mode-scan-trace-i (concat tag "#4.1") end t)
-            ;; preserves the \n character of comment in order
-            ;; for checking the recipes
-            (if (looking-back "\n") (backward-char))
-            (setq step (point)))
-        (smart-mode-scan-trace-i (concat tag "#4.2") end t)))
-    ;;
-    ;; scan the recipes (or done)
-    ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
-    (cond
-     ((<= end step) (setq result t)); done without checking recipes
-     ((looking-at "\\(\n\\)[^\t]"); done with no recipes
-      ;;(smart-mode-scan-trace-i (concat tag "#5.1") end t)
-      (goto-char (match-end 1)); skips the \n
-      (setq step end result t))
-     ((and (looking-back "^") (looking-at "\t")); multiple recipes (*)
-      ;;(smart-mode-scan-trace-i (concat tag "#5.2") end t)
-      (if (smart-mode-scan-recipes nil end)
-          (setq result t)
-        (smart-mode-scan-trace-o (concat tag "#5.2.1") "FAILED: scan-recipes" end t))
-      (setq step end))
-     ((looking-at "\\(\n\\)\\(\t\\)"); multiple recipes
-      ;;(smart-mode-scan-trace-i (concat tag "#5.3") end t)
-      (setq step (goto-char (match-end 1)))
-      (if (smart-mode-scan-recipes nil end)
-          (setq result t)
-        (smart-mode-scan-trace-o (concat tag "#5.3.1") "FAILED: scan-recipes" end t))
-      (setq step end))
-     ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(;\\)"); single recipe
-      ;;(smart-mode-scan-trace-i (concat tag "#5.4") end t)
-      (setq step (goto-char (match-beginning 1))); skip spaces
-      (if (smart-mode-scan-recipes step end)
-          (setq result t)
-        (smart-mode-scan-trace-o (concat tag "#5.4.1") "FAILED: scan-recipes" end t))
-      (setq step end))); cond
-    ;;
-    ;; scan any unscanned recipes
-    (while (and (not result) (<= step end)
-                (looking-at "\n\t\\([^\n]*\\)"))
-      (smart-mode-scan-trace-i (concat tag "#x") end t)
-      (smart-mode-warning-region (match-beginning 1) (match-end 1) "unscanned recipe: %s" (match-string 1))
-      (setq step (goto-char (match-end 0))))))
+    ;; scan dependencies and recipes
+    (smart-mode-scan-dependencies end)
+    (setq step (point) result (<= end step))))
 
 (defun smart-mode-scan-modifier-list (end)
   (smart-mode-scan** modifier-list
@@ -1782,42 +1708,106 @@
               (let ((sema (get-text-property end 'smart-semantic)) (dialect))
                 (or (equal sema 'dependencies))))
     (setq end (1+ end)))
-  (smart-mode-scan* dependencies
-      ((begin step) (pos))
-      (or continue (looking-at "[^;#\n]")); ended by ';' '#' '\n'
-    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (setq dialect (or smart-mode-scan-dialect
-                      (get-text-property (point) 'smart-dialect)))
-    (smart-mode-scan-dependency-list end)
-    (if (and (< step end) (looking-at "[ \t]+")); spaces
-        (setq step (goto-char (min (match-end 0) end))))
-    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-    (cond
-     ((<= end step) (setq step end result t))
-     ((looking-at "\n")
-      ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
-      (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
-      (smart-text-property begin (match-end 0) 'smart-dialect dialect)
-      (when (and (looking-at "\n\\(\t\\)\\(\n\\)") (<= (match-end 0) end))
-        ;;(smart-mode-scan-trace-i (concat tag "#2.1.1") end t)
-        (smart-match-property 1 2 'smart-dialect dialect)
-        (smart-match-property 1 2 'smart-semantic 'recipe)
-        (smart-match-property 1 1 'smart-semantic 'recipe-prefix)
-        (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face))
-      (setq step end result t))
-     ((looking-at "[;#]"); the ';' recipe or '#' comment
-      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
-      (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
-      (smart-text-property begin (match-end 0) 'smart-dialect dialect)
-      (setq step end result t))
-     ((<= step end)
-      ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
-      (setq pos (line-end-position))
-      (smart-mode-warning-region (point) pos "unexpected end of dependencies: %s" (buffer-substring (point) pos))
-      (setq step (goto-char pos))))
-    (when (and (not result) (<= end step))
-      (smart-mode-scan-trace-i (concat tag "#3") end t)
-      (setq step end result t))))
+  (let ((begin (point)))
+    (smart-mode-scan* dependencies
+        ((begin step) (pos))
+        (or continue (looking-at "[^;#\n]")); ended by ';' '#' '\n'
+      ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+      (setq dialect (or smart-mode-scan-dialect
+                        (get-text-property (point) 'smart-dialect)))
+      (smart-mode-scan-dependency-list end)
+      (if (and (< step end) (looking-at "[ \t]+")); spaces
+          (setq step (goto-char (min (match-end 0) end))))
+      ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+      (cond
+       ((<= end step) (setq step end result t))
+       ((looking-at "\n")
+        ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
+        (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+        (smart-text-property begin (match-end 0) 'smart-dialect dialect)
+        (when (and (looking-at "\n\\(\t\\)\\(\n\\)") (<= (match-end 0) end))
+          ;;(smart-mode-scan-trace-i (concat tag "#2.1.1") end t)
+          (smart-match-property 1 2 'smart-dialect dialect)
+          (smart-match-property 1 2 'smart-semantic 'recipe)
+          (smart-match-property 1 1 'smart-semantic 'recipe-prefix)
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face))
+        (setq step end result t))
+       ((looking-at "[;#]"); the ';' recipe or '#' comment
+        ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
+        (smart-text-property begin (match-end 0) 'smart-semantic 'dependencies)
+        (smart-text-property begin (match-end 0) 'smart-dialect dialect)
+        (setq step end result t))
+       ((<= step end)
+        ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
+        (setq pos (line-end-position))
+        (smart-mode-warning-region (point) pos "unexpected end of dependencies: %s" (buffer-substring (point) pos))
+        (setq step (goto-char pos))))
+      (when (and (not result) (<= end step))
+        (smart-mode-scan-trace-i (concat tag "#3") end t)
+        (setq step end result t)))
+    ;; ;;
+    ;; ;; dependencies properties
+    ;; (when (and nil result)
+    ;;   (smart-text-property begin (point) 'smart-dialect smart-mode-scan-dialect)
+    ;;   (smart-text-property begin (point) 'smart-semantic 'dependencies))
+    ;;
+    ;; continue scanning after dependencies.
+    (smart-mode-scan* after-dependencies () t
+      ;;
+      ;; unscanned dependencies characters
+      (when (and (< step end) (looking-at "\\([^;#\n]+\\)"))
+        (smart-mode-scan-trace-i (concat tag "#3") end t)
+        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid dependencies: %s" (match-string 1))
+        (setq step (goto-char (match-end 0))))
+      ;;
+      ;; scan the tailing comment if precented
+      (when (and (< step end) (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(#\\)"))
+        ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
+        (setq step (goto-char (match-beginning 1)))
+        (if (smart-mode-scan-comment end)
+            (progn
+              ;;(smart-mode-scan-trace-i (concat tag "#4.1") end t)
+              ;; preserves the \n character of comment in order
+              ;; for checking the recipes
+              (if (looking-back "\n") (backward-char))
+              (setq step (point)))
+          (smart-mode-scan-trace-i (concat tag "#4.2") end t)))
+      ;;
+      ;; scan the recipes (or done)
+      ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
+      (cond
+       ((<= end step) (setq result t)); done without checking recipes
+       ((looking-at "\\(\n\\)[^\t]"); done with no recipes
+        ;;(smart-mode-scan-trace-i (concat tag "#5.1") end t)
+        (goto-char (match-end 1)); skips the \n
+        (setq step end result t))
+       ((and (looking-back "^") (looking-at "\t")); multiple recipes (*)
+        ;;(smart-mode-scan-trace-i (concat tag "#5.2") end t)
+        (if (smart-mode-scan-recipes nil end)
+            (setq result t)
+          (smart-mode-scan-trace-o (concat tag "#5.2.1") "FAILED: scan-recipes" end t))
+        (setq step end))
+       ((looking-at "\\(\n\\)\\(\t\\)"); multiple recipes
+        ;;(smart-mode-scan-trace-i (concat tag "#5.3") end t)
+        (setq step (goto-char (match-end 1)))
+        (if (smart-mode-scan-recipes nil end)
+            (setq result t)
+          (smart-mode-scan-trace-o (concat tag "#5.3.1") "FAILED: scan-recipes" end t))
+        (setq step end))
+       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(;\\)"); single recipe
+        ;;(smart-mode-scan-trace-i (concat tag "#5.4") end t)
+        (setq step (goto-char (match-beginning 1))); skip spaces
+        (if (smart-mode-scan-recipes step end)
+            (setq result t)
+          (smart-mode-scan-trace-o (concat tag "#5.4.1") "FAILED: scan-recipes" end t))
+        (setq step end))); cond
+      ;;
+      ;; scan any unscanned recipes
+      (while (and (not result) (<= step end)
+                  (looking-at "\n\t\\([^\n]*\\)"))
+        (smart-mode-scan-trace-i (concat tag "#x") end t)
+        (smart-mode-warning-region (match-beginning 1) (match-end 1) "unscanned recipe: %s" (match-string 1))
+        (setq step (goto-char (match-end 0)))))))
 
 (defun smart-mode-scan-dependency-list (end)
   (smart-mode-scan** dependency-list () (looking-at "[^;#\n]")
