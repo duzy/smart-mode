@@ -1509,23 +1509,20 @@
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (smart-mode-scan-modifier-list end)
     (cond
+     ((<= end step))
      ((looking-back "\\]") ; after ]
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-      (setq step end result t))
+      (setq step end))
      ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\]\\)") ; ]
       ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
       (goto-char (match-end 1))
-      (setq step end result t))
-     (t
-      ;;(smart-mode-scan-trace-i (concat tag "#1.3") end t)
-      (smart-mode-warning-region (point) (line-end-position) "expecting ']' (modifiers)")))
-    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (when (and (not result) (<= end step))
-      (smart-mode-scan-trace-i (concat tag "#3") end t)
-      (setq step end result t)))
+      (setq step end)))
+    (smart-mode-scan-trace-i (concat tag "#2") end t)
+    (setq result (<= end step)))
   ;;
   ;; continue scanning after modifiers
   (smart-mode-scan* after-modifiers ((begin)) t
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; scan the optional colon ':' after ']'
     (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)"); :
@@ -1783,24 +1780,24 @@
         (setq step end result t))
        ((and (looking-back "^") (looking-at "\t")); multiple recipes (*)
         ;;(smart-mode-scan-trace-i (concat tag "#5.2") end t)
-        (if (smart-mode-scan-recipes nil end)
-            (setq result t)
-          (smart-mode-scan-trace-o (concat tag "#5.2.1") "FAILED: scan-recipes" end t))
-        (setq step end))
+        (smart-mode-scan-recipes nil end)
+        (setq step (point) result (<= end step))
+        (unless result
+          (smart-mode-scan-trace-o (concat tag "#5.2.1") "FAILED: scan-recipes" end t)))
        ((looking-at "\\(\n\\)\\(\t\\)"); multiple recipes
         ;;(smart-mode-scan-trace-i (concat tag "#5.3") end t)
         (setq step (goto-char (match-end 1)))
-        (if (smart-mode-scan-recipes nil end)
-            (setq result t)
-          (smart-mode-scan-trace-o (concat tag "#5.3.1") "FAILED: scan-recipes" end t))
-        (setq step end))
+        (smart-mode-scan-recipes nil end)
+        (setq step (point) result (<= end step))
+        (unless result
+          (smart-mode-scan-trace-o (concat tag "#5.3.1") "FAILED: scan-recipes" end t)))
        ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(;\\)"); single recipe
         ;;(smart-mode-scan-trace-i (concat tag "#5.4") end t)
         (setq step (goto-char (match-beginning 1))); skip spaces
-        (if (smart-mode-scan-recipes step end)
-            (setq result t)
-          (smart-mode-scan-trace-o (concat tag "#5.4.1") "FAILED: scan-recipes" end t))
-        (setq step end))); cond
+        (smart-mode-scan-recipes nil end)
+        (setq step (point) result (<= end step))
+        (unless result
+          (smart-mode-scan-trace-o (concat tag "#5.4.1") "FAILED: scan-recipes" end t)))); cond
       ;;
       ;; scan any unscanned recipes
       (while (and (not result) (<= step end)
