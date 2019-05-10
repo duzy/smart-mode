@@ -1178,9 +1178,12 @@
           step (goto-char (match-end 0))))); defun
 
 (defun smart-mode-scan-project-options (end)
-  (smart-mode-scan** project-options ((begin step)) (looking-at "[^(#\n]")
+  (smart-mode-scan** project-options
+      ((begin step))
+      (looking-at "[^(#\n]")
     (if (looking-at "[ \t]+"); spaces
         (setq step (goto-char (match-end 0))))
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
      ((looking-at smart-mode-project-option-regex)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-flag-sign-face)
@@ -1188,10 +1191,10 @@
       (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-flag-regex)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid project option: %s" (match-string 0))
-      (setq step (goto-char (match-end 0)))))
-    (when (looking-at "(")
+      (setq step (goto-char (match-end 0))))
+     ((or (looking-at "(") (looking-at smart-mode-bareword-regex))
       (smart-text-property begin (point) 'smart-semantic 'project-options)
-      (setq result t))))
+      (setq step end result t)))))
 
 (defun smart-mode-scan-project-name (end)
   (smart-mode-scan* project-name () (looking-at "[^#\n]")
