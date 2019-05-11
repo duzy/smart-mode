@@ -1117,7 +1117,7 @@
             (smart-mode-scan-comment end)
           (goto-char (match-end 0))))
        ((looking-at "#") (smart-mode-scan-comment end))
-       ((looking-at "[)]\\|]\\|[ \t]+") (goto-char (match-end 0)))
+       ((looking-at "[)]\\|]\\|[ \t\n]+") (goto-char (match-end 0)))
        ((looking-back "^[ \t]*"); beginning of line
         (cond
          ((looking-at "\\(project\\)[ \t#\n]")
@@ -1140,7 +1140,7 @@
         (goto-char (match-end 0)))
        ((<= (point) pre-point)
         (smart-mode-scan-trace-o "#2.2" sema end t)
-        (smart-mode-warning-region pre-point (point) "ERROR: %s" (buffer-substring pre-point (point)))
+        (smart-mode-warning-region pre-point end "ERROR: `%s`" (buffer-substring pre-point end))
         (goto-char (max (+ pre-point 1) (line-end-position))))
        (nil
         (smart-mode-scan-trace-o "#2.3" sema end t)))); while
@@ -1660,16 +1660,24 @@
             ;; skips the `plain|dock' keyword
             step (goto-char (match-end 1))))
      ((setq face 'smart-mode-warning-face)))
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;
     ;; scan modifier name and arguments
     (and
      (smart-mode-scan-expr end face); modifier or dialect name
      (smart-mode-scan-modifier-arguments end)
-     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-         (setq step (goto-char (match-end 0)))
-       (setq step (point))))
+     (setq step (point))
+     (while; spaces
+         (cond; \\(?:\\\\\n\\|[ \t]\\)+
+          ((looking-at "\\(\\\\\\)\n")
+           (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+          ((looking-at "[ \t]+")))
+       (setq step (goto-char (match-end 0)))))
     (when (looking-at ")")
       (smart-text-property (match-beginning 0) (match-end 0) 'font-lock-face 'smart-mode-paren-face)
       (smart-text-property begin (match-end 0) 'smart-semantic 'modifier)
@@ -1948,10 +1956,10 @@
                 (not (looking-at (concat comment-end "\n"))))
       ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
       (cond
-       ((looking-at "\\\\\\n")
-        (smart-match-property 0 0 'font-lock-face 'smart-mode-comment-slash-face)
+       ((looking-at "\\(\\\\\\)\n")
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-comment-slash-face)
         (setq step (goto-char (match-end 0))))
-       ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)+" smart-mode-comment-todos-regex 
+       ((looking-at (concat "[ \t]+" smart-mode-comment-todos-regex 
                             "\\(:\\)\\(?:\\\\\n\\|[ \t]\\)*\\([^.!?\n]*\\)"))
         (if (< lastpoint (match-beginning 1))
             (smart-text-property lastpoint (match-beginning 1) 'font-lock-face 'smart-mode-comment-face))
@@ -2255,8 +2263,12 @@
        (regex (if var (symbol-value var))))
       (looking-at "[^\n]")
     ;; scan valid/invalid options
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
      ((and regex (looking-at regex)); known statement options
@@ -2273,8 +2285,12 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
       (setq step (goto-char (match-end 0))))); cond
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
     ;; scan ending or any other expressions
     (cond
@@ -2290,8 +2306,12 @@
       ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "%s options error: %s" stmt (buffer-substring (match-beginning 0) (match-end 0)))
       (setq step (goto-char (match-end 0)))))
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
     (unless result
       (cond
@@ -2307,9 +2327,14 @@
       ((spec (intern-soft (format "smart-mode-scan-spec-%s" stmt)))
        (spec-begin step) (single))
       (looking-at "[^\n]")
+    ;;
     ;; spaces and continual lines
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+")
-        (setq step (goto-char (match-end 0))))
+    (while
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     (cond
      ((looking-at "\\((\\)\\(?:\\\\\n\\|[ \t]\\)*"); ... ( #...
       ;;(smart-mode-scan-trace-i "statement-specs#1.1" end)
@@ -2374,8 +2399,12 @@
       (if (functionp spec)
           (unwind-protect (funcall spec end)
             (setq step (point)))))
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spec tailing spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spec tailing spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;
     ;; warning any unscanned chars (before comments or \n)
     (when (looking-at "\\([^#)\n]+?\\)\\(?:\\\\\n\\|[ \t]\\)*")
@@ -2489,8 +2518,12 @@
   (smart-mode-scan* spec-eval () (looking-at "[^\n]")
     ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:eval\\)?\\(?:\\\\\n\\|[ \t]\\)*"); at the beginning of line
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     (and
      (cond
       ;; Builtin commands
@@ -2512,9 +2545,13 @@
       ((smart-mode-scan-trace-i (concat tag "#4") end t)
        nil))
      ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
-     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+")
-         (setq step (goto-char (match-end 0)))
-       t)
+     (prog1 t
+       (while; spaces
+           (cond; \\(?:\\\\\n\\|[ \t]\\)+
+            ((looking-at "\\(\\\\\\)\n")
+             (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+            ((looking-at "[ \t]+")))
+         (setq step (goto-char (match-end 0)))))
      ;;(smart-mode-scan-trace-i (concat tag "#6") end t)
      (smart-mode-scan-list end 'smart-mode-no-face)
      ;;(smart-mode-scan-trace-i (concat tag "#7") end t)
@@ -2671,8 +2708,12 @@
   (smart-mode-scan* recipe-builtin
       ((pos) (str) (kind))
       (looking-at "[^\n]")
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
      ;;
@@ -2722,8 +2763,12 @@
       (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad builtin: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); cond
     ;; skip spaces
-    (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
-        (setq step (goto-char (match-end 0))))
+    (while; spaces
+        (cond; \\(?:\\\\\n\\|[ \t]\\)+
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face))
+         ((looking-at "[ \t]+")))
+      (setq step (goto-char (match-end 0))))
     ;; arguments
     (when kind
       (cond
@@ -2934,7 +2979,10 @@
     (let ((step (point)) (name))
       (while (and (< step end) (< (point) end) (looking-at "[^\n]"))
         (cond
-         ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at "[ \t]+")
           (setq step (goto-char (match-end 0))))
          ((looking-at "\n"); end of scanning
           (goto-char (match-end 0))
@@ -2967,7 +3015,10 @@
           (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
-         ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at "[ \t]+")
           (setq step (goto-char (match-end 0))))
          ((looking-at ";"); end of scanning
           (smart-match-property 0 0 'font-lock-face 'smart-mode-c++-punc-face)
@@ -3014,7 +3065,10 @@
           (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
           (setq step (goto-char (match-end 0)))
           (save-excursion (goto-char end) (if (looking-at "\n\t") (setq end (match-end 0)))))
-         ((looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
+         ((looking-at "\\(\\\\\\)\n")
+          (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
+          (setq step (goto-char (match-end 0))))
+         ((looking-at "[ \t]+")
           (setq step (goto-char (match-end 0))))
          ((looking-at ";")
           (cond
