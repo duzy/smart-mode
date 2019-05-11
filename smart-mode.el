@@ -1028,7 +1028,7 @@
 
 (defun smart-mode-scan (end)
   (let ((rx-recipe "\\(\t\\)\\([^\n]*\\)\n")
-        (pre-point) (sema) (dia) (pos))
+        (pre-point) (sema) (dia) (pos) (spec))
     ;;
     ;; remove all properties to safe memory
     (remove-list-of-text-properties ;fontified
@@ -1044,16 +1044,20 @@
     (cond
      ((string= sema 'spec-import)
       ;;(smart-mode-scan-trace-o "#0.1" sema end t)
-      (smart-mode-scan-spec-import end t))
+      ;;(smart-mode-scan-spec-import end t)
+      (smart-mode-scan-specs (point) end "import" t))
      ((string= sema 'spec-files)
       ;;(smart-mode-scan-trace-o "#0.2" sema end t)
-      (smart-mode-scan-spec-files end t))
+      ;;(smart-mode-scan-spec-files end t)
+      (smart-mode-scan-specs (point) end "files" t))
      ((string= sema 'spec-configuration)
       ;;(smart-mode-scan-trace-o "#0.3" sema end t)
-      (smart-mode-scan-spec-configuration end t))
+      ;;(smart-mode-scan-spec-configuration end t)
+      (smart-mode-scan-specs (point) end "configuration" t))
      ((string= sema 'spec-eval)
       ;;(smart-mode-scan-trace-o "#0.4" sema end t)
-      (smart-mode-scan-spec-eval end t))
+      ;;(smart-mode-scan-spec-eval end t)
+      (smart-mode-scan-specs (point) end "eval" t))
      ((looking-back "\\\\\n")
       ;;(smart-mode-scan-trace-o "#0.5" sema end t)
       (cond
@@ -2312,19 +2316,22 @@
         (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (statement options): %s" (match-string 2))
         (setq step (goto-char (match-end 0)))))))); defun
 
-(defun smart-mode-scan-specs (begin end stmt)
+(defun smart-mode-scan-specs (begin end stmt &optional continue)
   (smart-mode-scan* specs
       ((spec (intern-soft (format "smart-mode-scan-spec-%s" stmt)))
        (spec-begin step) (single))
-      (looking-at "[^\n]")
+      (or continue (looking-at "[^\n]"))
     ;;
     ;; spaces and continual lines
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (smart-mode-scan-spaces end)
+    (smart-mode-scan-spaces end continue)
     ;;
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
+     (continue
+      ;;(smart-mode-scan-trace-i (concat tag "#1.0") end t)
+      (setq step (point)))
      ((looking-at "("); ... ( #...
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
       (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
@@ -2346,20 +2353,22 @@
      ((smart-mode-scan-trace-i (concat tag "#1.3") end t)))
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (smart-mode-scan-spec-list begin stmt spec single end)
+    (smart-mode-scan-spec-list end stmt spec single nil)
     (smart-mode-scan-spaces end)
     ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
     (cond
      ((<= end (point)); End but not completed!
       ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-      (smart-text-property begin end 'smart-semantic stmt); Set stmt semantic first!
+      (unless continue; Set stmt semantic first!
+        (smart-text-property begin end 'smart-semantic stmt))
       (smart-text-property (1- spec-begin) end 'smart-semantic (make-symbol (concat "spec-" stmt)))
       (setq step end result t))
      ((looking-at (if single "[#\n]" "[ \t\n]*\\()\\)"))
+      ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
       (unless single
         (smart-match-property 1 1 'font-lock-face 'smart-mode-paren-face))
-      ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
-      (smart-text-property begin (match-end 0) 'smart-semantic stmt); Set stmt semantic first!
+      ;;(unless continue; Set stmt semantic first!
+      (smart-text-property begin (match-end 0) 'smart-semantic stmt);)
       (smart-text-property (1- spec-begin) (match-beginning 0) 'smart-semantic (make-symbol (concat "spec-" stmt)))
       (setq step (goto-char (match-end 0)))
       (smart-mode-scan-spaces end)
@@ -2387,14 +2396,14 @@
       (goto-char (line-end-position))
       (setq step end)))); defun
 
-(defun smart-mode-scan-spec-list (begin stmt spec single end)
+(defun smart-mode-scan-spec-list (end stmt spec single continue)
   (smart-mode-scan** spec-list
-      ((spec-begin (point)) (pos))
+      ((begin (point)) (pos))
       (looking-back (if single "[^\n]" "[^)]"))
     ;;
     ;; spaces and continual lines
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (smart-mode-scan-spaces end)
+    (smart-mode-scan-spaces end nil t)
     ;;
     ;; calling the `spec' scanner
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
@@ -2452,7 +2461,7 @@
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; spaces and continual lines
-    (smart-mode-scan-spaces end nil t)
+    (smart-mode-scan-spaces end nil continue)
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (and
@@ -2477,7 +2486,7 @@
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; spaces and continual lines
-    (smart-mode-scan-spaces end nil t)
+    (smart-mode-scan-spaces end nil continue)
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (unless (smart-mode-scan-expr end 'smart-mode-pseg-face)
@@ -2523,22 +2532,47 @@
       (setq step (goto-char (line-end-position)))))))
 
 (defun smart-mode-scan-spec-configuration (end &optional continue)
-  (smart-mode-scan* spec-configuration () (looking-at "[^\n]")
+  (smart-mode-scan* spec-configuration ((begin step)) t;(looking-at "[^\n]")
     ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:configuration\\)?\\(?:\\\\\n\\|[ \t]\\)*")
-    (and
-     (if (smart-mode-scan-expr end 'smart-mode-no-face)
-         (setq result t); Good to continue!
-       (smart-mode-warning-region (point) (line-end-position) "bad configuration spec")
-       (setq step (goto-char (line-end-position)))
-       nil); Nil on failure to stop!
-     (cond
-      ((looking-at (concat "\\(?:\\\\\n\\|[ \t]\\)*" smart-mode-assign-regex "\\(?:\\\\\n\\|[ \t]\\)*"))
-       (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
-       (setq step (goto-char (match-end 0)))
-       (smart-mode-scan-list end 'smart-mode-no-face))
-      (t
-       (smart-mode-warning-region (match-beginning 1) end "configuration spec error#2")
-       (setq step (goto-char (match-end 0)))))))); defun
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    ;;
+    ;; spaces and continual lines
+    (smart-mode-scan-spaces end nil continue)
+    (smart-mode-scan-expr end 'smart-mode-no-face)
+    (smart-mode-scan-spaces end)
+    ;;
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (cond
+     ((looking-at smart-mode-assign-regex)
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
+      (setq step (goto-char (match-end 0)))
+      (smart-mode-scan-list end 'smart-mode-no-face)
+      (smart-mode-scan-spaces end nil continue); spaces or newlines
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1.1") end t)
+      (setq step end result t))
+     (t
+      (smart-mode-scan-trace-i (concat tag "#1.2") end t)
+      (smart-mode-warning-region (match-beginning 1) end "configuration spec error#2")
+      (setq step (goto-char (line-end-position)))))
+    ;;
+    ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
+    (cond
+     (result
+      ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
+      (when continue
+        ;;(smart-mode-scan-trace-i (concat tag "#3.1.1") end t)
+        (smart-mode-scan-spaces end nil t); spaces and newlines
+        (smart-text-property begin (point) 'smart-semantic 'spec-configuration)
+        (when (looking-at ")")
+          ;;(smart-mode-scan-trace-i (concat tag "#3.1.1.1") end t)
+          (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
+          (smart-match-property 0 0 'smart-semantic 'configuration)
+          (setq step (goto-char (match-end 0))))))
+     (t
+      (smart-mode-scan-trace-i (concat tag "#3.2") end t)
+      (smart-mode-warning-region (point) (line-end-position) "unterminated configuration spec")
+      (setq step (goto-char (line-end-position))))))); defun
 
 (defun smart-mode-scan-eval (end); region-specific
   (smart-mode-scan* eval ((begin (point)) (spec end)) (< begin end)
