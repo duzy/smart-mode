@@ -1038,7 +1038,7 @@
     (when (< (point-min) (1- (point)))
       (setq sema (get-text-property (1- (point)) 'smart-semantic)
             dia (get-text-property (1- (point)) 'smart-dialect)))
-    (smart-mode-scan-trace-o "#0" sema end t)
+    ;;(smart-mode-scan-trace-o "#0" sema end t)
     ;;
     ;; continue with the last scan (semantic)
     (cond
@@ -1107,13 +1107,9 @@
           (smart-match-property 1 2 'smart-semantic 'recipe)
           (smart-match-property 1 1 'smart-semantic 'recipe-prefix)
           (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
-          (smart-mode-warning-region
-           (match-beginning 2) (match-end 2)
-           "%s: invalid tab: %s"
-           smart-mode-scan-dialect (match-string 2))
-          (smart-mode-scan-trace-o
-           nil (format "INVALID TAB: %s" (match-string 2))
-           end)
+          (smart-mode-warning-region (match-beginning 2) (match-end 2)
+                                     "%s: bad tab: %s" smart-mode-scan-dialect (match-string 2))
+          (smart-mode-scan-trace-o nil (format "BAD TAB: %s" (match-string 2)) end)
           (goto-char (match-end 0)))))
        ((looking-at "^[ \t]*\\(\n+\\|#\\)")
         (setq smart-mode-scan-dialect nil)
@@ -1139,8 +1135,8 @@
        ((and (= (point) pre-point) (looking-at "\\([^\n]+\\)\n\\(?:[ \t]*\\(?:#[^\n]*\\)?\n\\)*"))
         (smart-mode-scan-trace-o "#2.1" sema end t)
         ;;(remove-list-of-text-properties (match-beginning 1) (match-end 1) '(font-lock-face face ,@(smart-mode-scan-properties)))
-        (smart-mode-warning-region (match-beginning 1) (match-end 1) "INVALID: %s" (match-string 1))
-        (smart-mode-scan-trace-o nil (format "INVALID: %s" (match-string 1)) end)
+        (smart-mode-warning-region (match-beginning 1) (match-end 1) "BAD: %s" (match-string 1))
+        (smart-mode-scan-trace-o nil (format "BAD: %s" (match-string 1)) end)
         (goto-char (match-end 0)))
        ((<= (point) pre-point)
         (smart-mode-scan-trace-o "#2.2" sema end t)
@@ -1188,7 +1184,7 @@
       (smart-match-property 2 2 'font-lock-face 'smart-mode-flag-face)
       (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-flag-regex)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid project option: %s" (match-string 0))
+      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad project option: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))
      ((or (looking-at "(") (looking-at smart-mode-bareword-regex))
       (smart-text-property begin (point) 'smart-semantic 'project-options)
@@ -1206,7 +1202,7 @@
       (setq step (goto-char (match-end 0)) result t))
      ;; highlight invalid project name: zzz (
      ((looking-at "\\([^(\n]+\\)"); invalid but still results t
-      (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid project name: %s" (buffer-substring (match-beginning 1) (match-end 1)))
+      (smart-mode-warning-region (match-beginning 1) (match-end 1) "bad project name: %s" (buffer-substring (match-beginning 1) (match-end 1)))
       (setq step (goto-char (match-end 0)) result t)))))
 
 (defun smart-mode-scan-project-bases (end)
@@ -1299,7 +1295,7 @@
           (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
           (goto-char (match-end 0))
           (setq step end result t))
-      (smart-mode-warning-region (point) end "invalid expression of assignment")
+      (smart-mode-warning-region (point) end "bad expression of assignment")
       ;;(setq step (point))
       )))
 
@@ -1414,7 +1410,7 @@
             (setq step end result t)))))
     ;;(smart-mode-scan-trace-i (concat tag "#5") end)
     (unless result
-      (smart-mode-warning-region (point) (line-end-position) "invalid after :%s:" name)
+      (smart-mode-warning-region (point) (line-end-position) "bad after :%s:" name)
       (setq step (goto-char (line-end-position)))))); defun
 
 (defun smart-mode-scan-special-rule-options (name end)
@@ -1432,7 +1428,7 @@
        ((smart-match-property 0 0 'font-lock-face 'smart-mode-flag-face)))
       (setq step (goto-char (match-end 0))))
      ((looking-at smart-mode-flag-regex)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
+      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
       (setq step (goto-char (match-end 0))))
      ((looking-at "\n"); found '\n', done!
       (setq step (goto-char (match-end 0)) result t))
@@ -1449,7 +1445,7 @@
         (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-        (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (special rule): %s" (match-string 2))
+        (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (special rule): %s" (match-string 2))
         (setq step (goto-char (match-end 0)))))))); defun
 
 (defun smart-mode-scan-rule-colon (end); region-specific
@@ -1613,7 +1609,7 @@
       (setq step (goto-char (match-end 0))))
      ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
       ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (parameters): %s" (match-string 2))
+      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (parameters): %s" (match-string 2))
       (setq step (goto-char (match-end 0))))
      ((looking-at "[@]") ; special names for parameters
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
@@ -1750,7 +1746,7 @@
       ;; unscanned dependencies characters
       (when (and (< step end) (looking-at "\\([^;#\n]+\\)"))
         (smart-mode-scan-trace-i (concat tag "#3") end t)
-        (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid dependencies: %s" (match-string 1))
+        (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad dependencies: %s" (match-string 1))
         (setq step (goto-char (match-end 0))))
       ;;
       ;; scan the tailing comment if precented
@@ -1928,7 +1924,7 @@
        ))
      ((looking-at "\\(\\\\\\)\\([^\n]\\)"); unknown in-line escapes
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (list): %s" (match-string 2))
+      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (list): %s" (match-string 2))
       (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end suggested-face)
       ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
@@ -1989,7 +1985,7 @@
       (smart-match-property 0 0 'font-lock-face 'smart-mode-escape-char-face)
       (setq step (goto-char (match-end 0)) result t))
      ((looking-at "[ \t#]"); (and (< step end) ...
-      (smart-mode-warning-region begin (match-end 0) "invalid escape: %s" (match-string 0))
+      (smart-mode-warning-region begin (match-end 0) "bad escape: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))))); defun
 
 (defun smart-mode-scan-bareword (end &optional suggested-face)
@@ -2109,7 +2105,7 @@
       (setq step end result t))
      ((looking-at smart-mode-scan-combine-delim)
       ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid key-value")
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad key-value")
       (setq step end))
      ((smart-mode-scan-expr end suggested-face)
       ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
@@ -2120,7 +2116,7 @@
     (smart-match-property 0 0 'font-lock-face 'smart-mode-arrow-face)
     (setq step (goto-char (match-end 0)))
     (when (looking-at (concat smart-mode-selection-arrows-nocapture "+")); continual arrows: -> =>
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid selection")
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad selection")
       (setq step (goto-char (match-end 0))))
     (unless face
       (setq face 'smart-mode-call-var-name-face))
@@ -2170,7 +2166,7 @@
             left (match-string 2))); left = ':'
      ;; ends with wrong calling symbols..
      ((looking-at "[$&][^ \t\n]?");
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid calling (char): %s" (match-string 0))
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad calling (char): %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); left = ':'
     ;;(smart-mode-scan-trace-i (concat tag "#2") end)
     ;;
@@ -2250,7 +2246,7 @@
                (setq step end result t))
            (setq bad t)))))); and
     (when (and (< step end) (not result) (looking-at "\\([^)\n]+\\))"))
-      (smart-mode-warning-region (match-beginning 1) (match-end 1) "invalid expression (group): %s" (match-string 1))
+      (smart-mode-warning-region (match-beginning 1) (match-end 1) "bad expression (group): %s" (match-string 1))
       (setq step end result t)))) ; defun>let>cond
 
 (defun smart-mode-scan-statement-options (stmt end); statement options: -xxx -yyy (
@@ -2275,7 +2271,7 @@
       (setq step (point)))
      ((looking-at smart-mode-flag-regex)
       ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
+      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad %s option: %s" stmt (buffer-substring (match-beginning 1) (match-end 2)))
       (setq step (goto-char (match-end 0))))); cond
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
         (setq step (goto-char (match-end 0))))
@@ -2303,7 +2299,7 @@
         (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
         (setq step (goto-char (match-end 0))))
        ((looking-at "\\(\\\\\\)\\([^\n]\\)") ; unknown in-line escapes
-        (smart-mode-warning-region (match-beginning 1) (match-end 2) "invalid escape (statement options): %s" (match-string 2))
+        (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (statement options): %s" (match-string 2))
         (setq step (goto-char (match-end 0)))))))); defun
 
 (defun smart-mode-scan-statement-specs (begin end stmt)
@@ -2437,13 +2433,13 @@
       (looking-at "[^\n]");(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:files\\)?\\(?:\\\\\n\\|[ \t]\\)*")
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (unless (smart-mode-scan-expr end 'smart-mode-pseg-face)
-      (smart-mode-warning-region (point) (line-end-position) "invalid files spec")
+      (smart-mode-warning-region (point) (line-end-position) "bad files spec")
       (setq step (goto-char (line-end-position))))
     (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(=>\\|[⇒→⇢]\\)\\(?:\\\\\n\\|[ \t]\\)*")
       (smart-match-property 1 1 'font-lock-face 'smart-mode-arrow-face)
       (setq step (goto-char (match-end 0))))
     (unless (smart-mode-scan-expr end 'smart-mode-pseg-face)
-      (smart-mode-warning-region (point) (line-end-position) "invalid files spec value")
+      (smart-mode-warning-region (point) (line-end-position) "bad files spec value")
       (setq step (goto-char (line-end-position))))
     (setq result t)))
 
@@ -2453,7 +2449,7 @@
     (and
      (if (smart-mode-scan-expr end 'smart-mode-no-face)
          (setq result t); Good to continue!
-       (smart-mode-warning-region (point) (line-end-position) "invalid configuration spec")
+       (smart-mode-warning-region (point) (line-end-position) "bad configuration spec")
        (setq step (goto-char (line-end-position)))
        nil); Nil on failure to stop!
      (cond
@@ -2505,7 +2501,7 @@
       ;; User expressions: user->xxx +=
       ((looking-at (concat "\\(user\\)" smart-mode-selection-arrows-nocapture)); user=>  user->
        ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-       (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid eval spec: %s" (match-string 0))
+       (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad eval spec: %s" (match-string 0))
        (setq step (goto-char (match-end 0))))
       ;; Unknown commands
       ((smart-mode-scan-expr end 'smart-mode-warning-face)
@@ -2723,7 +2719,7 @@
      ;; Invalid command expresions
      ((looking-at "[^ \t#\n]+")
       ;;(smart-mode-scan-trace-i (concat tag "#2.6") end t)
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin: %s" (match-string 0))
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad builtin: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); cond
     ;; skip spaces
     (if (looking-at "\\(?:\\\\\n\\|[ \t]\\)+"); spaces
@@ -2758,7 +2754,7 @@
       (setq step (point)))
      ((looking-at "[^\n]+")
       ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (smart-mode-warning-region (match-beginning 0) (match-end 0) "invalid builtin expressions: %s" (match-string 0))
+      (smart-mode-warning-region (match-beginning 0) (match-end 0) "bad builtin expressions: %s" (match-string 0))
       (setq step (goto-char (match-end 0))))); cond
     ;;
     (when (< step end)
