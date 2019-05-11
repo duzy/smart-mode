@@ -877,13 +877,14 @@
                  (setq pre-body-step step
                        pre-body-point (point)
                        body-result (progn ,@body))
-                 (when (and body-result (= step pre-body-step) (< step (point)))
+                 (when (and (<= step pre-body-step) (< step (point)))
                    (setq step (point)))
-                 (when (<= step pre-body-step)
-                   (smart-mode-scan-trace-o ,tag-o (format "ERROR(%s %s)(%s %s) %s" pre-body-point (point) pre-body-step step body-result) end t)
+                 (when (and (<= step pre-body-step) (< step end))
+                   (smart-mode-scan-trace-o ,tag-o (format "ERROR(%s %s)(%s %s)(%s,%s)" pre-body-point (point) pre-body-step step result body-result) end t)
                    (smart-mode-warning-rest-line ,tag-s end)
-                   (setq step end))
-                 (smart-mode-scan-trace-o ,tag-o result end (not result)))); let
+                   (setq step end)))
+               ;;(smart-mode-scan-trace-o ,tag-o result end (not result))
+               ); let
            )
          result)))
   ;;(macroexpand-1 '(smart-mode-scan* foo "^foo$" ((a)) (message "xxx") t))
@@ -903,13 +904,14 @@
                  (setq pre-body-step step
                        pre-body-point (point)
                        body-result (progn ,@body))
-                 (when (and body-result (= step pre-body-step) (< step (point)))
+                 (when (and (<= step pre-body-step) (< step (point)))
                    (setq step (point)))
-                 (when (<= step pre-body-step)
-                   (smart-mode-scan-trace-o ,tag-o (format "ERROR*(%s %s)(%s %s) %s" pre-body-point (point) pre-body-step step body-result) end t)
+                 (when (and (<= step pre-body-step) (< step end))
+                   (smart-mode-scan-trace-o ,tag-o (format "ERROR*(%s %s)(%s %s)(%s)" pre-body-point (point) pre-body-step step result body-result) end t)
                    (smart-mode-warning-rest-line ,tag-s end)
                    (setq step end)))
-               (smart-mode-scan-trace-o ,tag-o result end (not result))); let
+               ;;(smart-mode-scan-trace-o ,tag-o result end (not result))
+               ); let
            )
          result)))
 
@@ -1243,45 +1245,42 @@
     (if (looking-at "[ \t]+"); line preceding spaces
         (setq step (goto-char (match-end 0)) begin step))
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
-    (and
-     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-     (when (smart-mode-scan-expr end); the first expression (left operand)
-       t)
-     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-     (if (looking-at "[ \t]+"); spaces after the first expression
-         (setq step (goto-char (match-end 0)))
-       t)
-     (cond
-      ;;
-      ;; assignments: foo := ...
-      ((looking-at smart-mode-assign-regex)
-       ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-       (unless (smart-mode-scan-assign begin end)
-         (smart-mode-scan-trace-i (concat tag "#3.2") end t))
-       (setq step end result t))
-      ;;
-      ;; too many colons
-      ((looking-at "\\(::+\\)[ \t]*"); ::+
-       ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
-       (smart-mode-warning-region (1+ (match-beginning 1)) (match-end 1) "too many colons")
-       (setq step (goto-char (1- (match-end 0))))
-       (when (smart-mode-scan-rule-colon-after begin end)
-         (setq step end result t)))
-      ;;
-      ;; single-target rules
-      ((looking-at "\\(:\\)[^:=]")
-       ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
-       ;;(setq pos (point))
-       (unless (smart-mode-scan-rule-colon-after begin end)
-         (smart-mode-scan-trace-i (concat tag "#3.4") end t))
-       (setq step end result t))
-      ;;
-      ;; multiple-targets rules
-      ((looking-at "[^:]")
-       ;;(smart-mode-scan-trace-i (concat tag "#3.5") end t)
-       (unless (smart-mode-scan-rule-rest-targets begin end)
-         (smart-mode-scan-trace-i (concat tag "#3.6") end t))
-       (setq step end result t)))))); defun
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (smart-mode-scan-expr end); the first expression (left operand)
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+    (if (looking-at "[ \t]+"); spaces after the first expression
+        (setq step (goto-char (match-end 0))))
+    (cond
+     ;;
+     ;; assignments: foo := ...
+     ((looking-at smart-mode-assign-regex)
+      ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
+      (unless (smart-mode-scan-assign begin end)
+        (smart-mode-scan-trace-i (concat tag "#3.2") end t))
+      (setq step end result t))
+     ;;
+     ;; too many colons
+     ((looking-at "\\(::+\\)[ \t]*"); ::+
+      ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
+      (smart-mode-warning-region (1+ (match-beginning 1)) (match-end 1) "too many colons")
+      (setq step (goto-char (1- (match-end 0))))
+      (when (smart-mode-scan-rule-colon-after begin end)
+        (setq step end result t)))
+     ;;
+     ;; single-target rules
+     ((looking-at "\\(:\\)[^:=]")
+      ;;(smart-mode-scan-trace-i (concat tag "#3.3") end t)
+      ;;(setq pos (point))
+      (unless (smart-mode-scan-rule-colon-after begin end)
+        (smart-mode-scan-trace-i (concat tag "#3.4") end t))
+      (setq step end result t))
+     ;;
+     ;; multiple-targets rules
+     ((looking-at "[^:]")
+      ;;(smart-mode-scan-trace-i (concat tag "#3.5") end t)
+      (unless (smart-mode-scan-rule-rest-targets begin end)
+        (smart-mode-scan-trace-i (concat tag "#3.6") end t))
+      (setq step end result t))))); defun
 
 (defun smart-mode-scan-assign-name (end); region-specific
   (smart-mode-scan* assign-name
@@ -1486,7 +1485,7 @@
     ;;
     ;; scan modifiers, dependencies and recipes
     (smart-mode-scan-modifiers end)
-    (setq step (point) result (<= end step))))
+    (setq step (point) result t)))
 
 (defun smart-mode-scan-modifiers (end &optional continue)
   ;;(smart-mode-scan-trace-o "modifiers#a.0" continue end t)
@@ -1502,7 +1501,7 @@
       ()
       (cond
        (continue)
-       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)")
+       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)"); \\[
         (smart-match-property 1 1 'font-lock-face 'smart-mode-modifier-left-brack-face)
         (smart-match-property 1 1 'smart-semantic 'modifiers)
         (setq step (goto-char (match-end 1))))); "\\["
@@ -1517,12 +1516,12 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1.2") end t)
       (goto-char (match-end 1))
       (setq step end)))
-    (smart-mode-scan-trace-i (concat tag "#2") end t)
-    (setq result (<= end step)))
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+    (setq step end result t))
   ;;
   ;; continue scanning after modifiers
   (smart-mode-scan* after-modifiers ((begin)) t
-    (smart-mode-scan-trace-i (concat tag "#0") end t)
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; scan the optional colon ':' after ']'
     (when (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(:\\)"); :
@@ -1536,7 +1535,8 @@
     ;;
     ;; scan dependencies and recipes
     (smart-mode-scan-dependencies end)
-    (setq step (point) result (<= end step))))
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+    (setq step (point) result t)))
 
 (defun smart-mode-scan-modifier-list (end)
   (smart-mode-scan** modifier-list
@@ -1575,11 +1575,7 @@
       ;;(smart-mode-scan-trace-i (concat tag "#1.5") end t)
       (smart-text-property lastpoint (match-beginning 0) 'smart-semantic 'modifiers)
       (if (smart-mode-scan-modifier end)
-          (setq step (point) lastpoint step))))
-    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (when (and (not result) (<= end step))
-      (smart-mode-scan-trace-i (concat tag "#3") end t)
-      (setq step end result t))))
+          (setq step (point) lastpoint step))))))
 
 (defun smart-mode-scan-parameters (end)
   (smart-mode-scan* parameters
