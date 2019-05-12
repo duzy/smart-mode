@@ -1805,15 +1805,14 @@
         ;;(smart-mode-scan-trace-i (concat tag "#5.2") end t)
         (smart-mode-scan-recipes nil end)
         (setq step (point) result t))
-       ((looking-at "\\(\n\\)\\(\t\\)"); multiple recipes
+       ((looking-at "\n\t"); multiple recipes
         ;;(smart-mode-scan-trace-i (concat tag "#5.3") end t)
         (setq step (goto-char (match-end 1)))
         (smart-mode-scan-recipes nil end)
         (setq step (point) result t))
-       ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(;\\)"); single recipe
-        ;;(smart-mode-scan-trace-i (concat tag "#5.4") end t)
-        (setq step (goto-char (match-beginning 1))); skip spaces
-        (smart-mode-scan-recipes nil end)
+       ((looking-at ";"); single recipe
+        (smart-mode-scan-trace-i (concat tag "#5.4") end t)
+        (smart-mode-scan-recipes (point) end)
         (setq step (point) result t))); cond
       ;;
       ;; scan any unscanned recipes
@@ -1923,7 +1922,7 @@
 
 (defun smart-mode-scan-list (end &optional suggested-face delim recipe)
   (smart-mode-scan** list ((pos)) t;(looking-at "[^\n)\\]]")
-    (smart-mode-scan-spaces end t)
+    (smart-mode-scan-spaces end)
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (cond
      ((and delim (stringp delim) (looking-at delim))
@@ -1932,24 +1931,24 @@
      ((looking-at "[#\n)]\\|\\]")
       ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
       (setq step end result t))
-     ((looking-at "\\(\\\\\\)\n"); continual lines
-      ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
-      (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
-      (setq step (goto-char (match-end 0)))
-      (cond
-       ((and recipe (looking-at "\t"))
-        ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-        (smart-match-property 0 0 'font-lock-face 'smart-mode-recipe-prefix-face)
-        (setq step (goto-char (match-end 0))))
-       ;; ((<= end step)
-       ;;  (setq pos end end (line-end-position))
-       ;;  (if (= step end) (setq result t)
-       ;;    (smart-mode-scan-trace-o (concat tag "#3.2") (format "extends %s->%s" pos end) end t)))
-       ))
-     ((looking-at "\\(\\\\\\)\\([^\n]\\)"); unknown in-line escapes
-      ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
-      (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (list): %s" (match-string 2))
-      (setq step (goto-char (match-end 0))))
+     ;; ((looking-at "\\(\\\\\\)\n"); continual lines
+     ;;  ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
+     ;;  (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
+     ;;  (setq step (goto-char (match-end 0)))
+     ;;  (cond
+     ;;   ((and recipe (looking-at "\t"))
+     ;;    ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
+     ;;    (smart-match-property 0 0 'font-lock-face 'smart-mode-recipe-prefix-face)
+     ;;    (setq step (goto-char (match-end 0))))
+     ;;   ;; ((<= end step)
+     ;;   ;;  (setq pos end end (line-end-position))
+     ;;   ;;  (if (= step end) (setq result t)
+     ;;   ;;    (smart-mode-scan-trace-o (concat tag "#3.2") (format "extends %s->%s" pos end) end t)))
+     ;;   ))
+     ;; ((looking-at "\\(\\\\\\)\\([^\n]\\)"); unknown in-line escapes
+     ;;  ;;(smart-mode-scan-trace-i (concat tag "#4") end t)
+     ;;  (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (list): %s" (match-string 2))
+     ;;  (setq step (goto-char (match-end 0))))
      ((smart-mode-scan-expr end suggested-face)
       ;;(smart-mode-scan-trace-i (concat tag "#5") end t)
       (setq step (point))))
@@ -2248,27 +2247,26 @@
   (smart-mode-scan* group ((bad)) (looking-at "(")
     (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
     (setq step (goto-char (match-end 0)))
-    (and
-     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-     (smart-mode-scan-list end 'smart-mode-no-face "[,)]")
-     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-     (cond
-      ((looking-at ")")
-       ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
-       (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
-       (goto-char (match-end 0))
-       (setq step end result t))
-      ((while (and (not bad) (not result)
-                   (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(,\\)\\(?:\\\\\n\\|[ \t]\\)*")); commas
-         ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
-         (smart-match-property 1 1 'font-lock-face 'smart-mode-paren-face)
-         (setq step (goto-char (match-end 0)))
-         (if (smart-mode-scan-list end 'smart-mode-no-face "[,)]")
-             (when (looking-at ")"); the right paren ')'
-               (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
-               (goto-char (match-end 0))
-               (setq step end result t))
-           (setq bad t)))))); and
+    ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
+    (smart-mode-scan-list end (or suggested-face 'smart-mode-no-face) "[,)]")
+    ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
+    (cond
+     ((looking-at ")")
+      ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
+      (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
+      (goto-char (match-end 0))
+      (setq step end result t))
+     ((while (and (not bad) (not result)
+                  (looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(,\\)\\(?:\\\\\n\\|[ \t]\\)*")); commas
+        ;;(smart-mode-scan-trace-i (concat tag "#3.2") end t)
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-paren-face)
+        (setq step (goto-char (match-end 0)))
+        (if (smart-mode-scan-list end 'smart-mode-no-face "[,)]")
+            (when (looking-at ")"); the right paren ')'
+              (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
+              (goto-char (match-end 0))
+              (setq step end result t))
+          (setq bad t))))); and
     (when (and (< step end) (not result) (looking-at "\\([^)\n]+\\))"))
       (smart-mode-warning-region (match-beginning 1) (match-end 1) "bad expression (group): %s" (match-string 1))
       (setq step end result t)))) ; defun>let>cond
@@ -2362,7 +2360,7 @@
      ((smart-mode-scan-trace-i (concat tag "#1.3") end t)))
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (smart-mode-scan-spec-list end stmt spec single nil)
+    (smart-mode-scan-spec-list end stmt spec single continue)
     (smart-mode-scan-spaces end)
     ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
     (cond
@@ -2418,7 +2416,7 @@
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (when (and (< step end) (looking-at "[^#]") (functionp spec))
       ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
-      (unwind-protect (funcall spec end)
+      (unwind-protect (funcall spec end continue)
         (setq step (point))))
     ;;
     ;; spaces and continual lines
@@ -2491,23 +2489,43 @@
 
 (defun smart-mode-scan-spec-files (end &optional continue)
   ;;(smart-mode-scan-trace-i "spec-files" end t)
-  (smart-mode-scan* spec-files ((begin step)) t;(looking-at "[^\n]")
+  (smart-mode-scan* spec-files ((begin step) (arrow)) t;(looking-at "[^\n]")
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; spaces and continual lines
     (smart-mode-scan-spaces end nil continue)
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
-    (unless (smart-mode-scan-expr end 'smart-mode-pseg-face)
-      ;;(smart-mode-scan-trace-i (concat tag "#0.1") end t)
+    (cond 
+     (continue
+      ;;(smart-mode-scan-trace-i (concat tag "#1.1") end t)
+      (while
+          (cond
+           ((<= end (point)) nil)
+           ((looking-at ")")
+            (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
+            (goto-char (match-end 0))
+            nil)
+           ((looking-at smart-mode-selection-arrows)
+            (setq arrow t)
+            nil)
+           (t))
+        (smart-mode-scan-expr end 'smart-mode-pseg-face)
+        (smart-mode-scan-spaces end)
+        ;;(smart-mode-scan-trace-i (concat tag "#1.1.1") end t)
+        (setq step (point))))
+     ((and (not (smart-mode-scan-expr end 'smart-mode-pseg-face))
+           (< (point) end))
+      (smart-mode-scan-trace-i (concat tag "#1.2") end t)
       (smart-mode-warning-region (point) (line-end-position) "bad files spec")
-      (setq step (goto-char (line-end-position))))
+      (setq step (goto-char (line-end-position)))))
     ;;
     ;; spaces and continual lines
     (smart-mode-scan-spaces end)
+    (setq step (point))
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (when (looking-at smart-mode-selection-arrows); "=>\\|[⇒→⇢]"
+    (when (and (< step end) (or arrow (looking-at smart-mode-selection-arrows))); "=>\\|[⇒→⇢]"
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
       (smart-match-property 0 0 'font-lock-face 'smart-mode-arrow-face)
       (setq step (goto-char (match-end 0)))
@@ -2524,6 +2542,7 @@
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#3") end t)
     (cond
+     ((<= end step))
      (result
       ;;(smart-mode-scan-trace-i (concat tag "#3.1") end t)
       (when continue
@@ -2535,7 +2554,7 @@
           (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
           (smart-match-property 0 0 'smart-semantic 'files)
           (setq step (goto-char (match-end 0))))))
-     (t
+     (nil
       (smart-mode-scan-trace-i (concat tag "#3.2") end t)
       (smart-mode-warning-region (point) (line-end-position) "unterminated files spec")
       (setq step (goto-char (line-end-position)))))))
@@ -2653,13 +2672,14 @@
   (smart-mode-scan* recipes
       ((scanner (smart-mode-select-dialect-scanner)) (pos))
       (cond
-       ((and semi (looking-at ";\\(?:\\\\\n\\|[ \t]\\)*"))
+       ((and semi (looking-at ";"))
         ;;(smart-mode-scan-trace-o (concat tag "#0.1") smart-mode-scan-dialect end t)
         t)
        ((or (looking-at "^\t") (and (looking-back "^") (looking-at "\t")))
         ;;(smart-mode-scan-trace-o (concat tag "#0.2") smart-mode-scan-dialect end t)
         t))
     ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
+    ;;(smart-mode-scan-spaces end)
     (cond
      ;; single recipe only (semi)
      ((and semi (number-or-marker-p semi))
