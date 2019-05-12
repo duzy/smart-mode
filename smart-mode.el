@@ -97,7 +97,7 @@
   "\\(@\\|[[:alpha:]][[:alnum:]_+-]*\\)"
   "Regex matching project name")
 
-(defconst smart-mode-bareword-regex
+(defconst smart-mode-bareword-regex; "\\(\\(?:\\w\\|-\\|_\\)+\\)"
   "\\([[:alpha:]_][[:alnum:]_+-]*\\)"
   "Regex matching barewords")
 
@@ -331,7 +331,7 @@
   "Delimiters to prevent scan combination in smart editing mode.")
 
 (defconst smart-mode-selection-arrows
-  "[=-]>\\|[→⇢⇒]"
+  "[=-]>\\|[⇒→⇢]"
   "Selection arrow operators.")
 
 (defconst smart-mode-selection-arrows-capture
@@ -1030,15 +1030,15 @@
   (let ((rx-recipe "\\(\t\\)\\([^\n]*\\)\n")
         (pre-point) (sema) (dia) (pos) (spec))
     ;;
-    ;; remove all properties to safe memory
-    (remove-list-of-text-properties ;fontified
-     (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
-    ;;
     ;; continual semantic
     (when (< (point-min) (1- (point)))
       (setq sema (get-text-property (1- (point)) 'smart-semantic)
             dia (get-text-property (1- (point)) 'smart-dialect)))
-    ;;(smart-mode-scan-trace-o "#0" sema end t)
+    (smart-mode-scan-trace-o "#0" sema end t)
+    ;;
+    ;; remove all properties to safe memory
+    (remove-list-of-text-properties ;fontified
+     (point) end '(font-lock-face face ,@(smart-mode-scan-properties)))
     ;;
     ;; continue with the last scan (semantic)
     (cond
@@ -1097,17 +1097,31 @@
       (cond
        ((or (looking-at (concat "^" rx-recipe))
             (looking-at (concat "\n" rx-recipe)))
-        (setq sema (get-text-property (match-beginning 1) 'smart-semantic))
-        (setq dia (get-text-property (match-beginning 1) 'smart-dialect))
+        ;;(smart-mode-scan-trace-o "#1.1" sema end t)
+        (unless sema
+          ;; (smart-mode-scan-trace-o "#1.1.1" sema end t)
+          ;; (save-excursion
+          ;;   (while (and (not sema) (< (point-min) (point)))
+          ;;     (setq sema (get-text-property (1+ (point)) 'smart-semantic))
+          ;;     (setq dia (get-text-property (1+ (point)) 'smart-dialect))
+          ;;     ;;(smart-mode-scan-trace-o "#1.1.2" sema end t)
+          ;;     (beginning-of-line 0)))
+          (unless sema
+            (setq pos (match-beginning 1))
+            (setq sema (get-text-property pos 'smart-semantic))
+            (setq dia (get-text-property pos 'smart-dialect))))
         (cond
          ((string= sema 'recipe-prefix)
+          ;;(smart-mode-scan-trace-o "#1.1.1" sema end t)
           (goto-char (match-end 0)))
          (smart-mode-scan-dialect
+          ;;(smart-mode-scan-trace-o "#1.1.2" sema end t)
           (setq pos (match-end 0))
           (smart-mode-scan-recipes nil end)
           (unless (< pos (point)) (goto-char pos))
           (setq smart-mode-scan-dialect nil))
          (t
+          ;;(smart-mode-scan-trace-o "#1.1.3" sema end t)
           (smart-match-property 1 2 'smart-semantic 'recipe)
           (smart-match-property 1 1 'smart-semantic 'recipe-prefix)
           (smart-match-property 1 1 'font-lock-face 'smart-mode-recipe-prefix-face)
@@ -1116,6 +1130,7 @@
           (smart-mode-scan-trace-o nil (format "BAD TAB: %s" (match-string 2)) end)
           (goto-char (match-end 0)))))
        ((looking-at "^[ \t]*\\(\n+\\|#\\)")
+        ;;(smart-mode-scan-trace-o "#1.3" sema end t)
         (setq smart-mode-scan-dialect nil)
         (if (string= "#" (match-string 1))
             (smart-mode-scan-comment end)
@@ -1789,23 +1804,17 @@
        ((and (looking-back "^") (looking-at "\t")); multiple recipes (*)
         ;;(smart-mode-scan-trace-i (concat tag "#5.2") end t)
         (smart-mode-scan-recipes nil end)
-        (setq step (point) result (<= end step))
-        (unless result
-          (smart-mode-scan-trace-o (concat tag "#5.2.1") "FAILED: scan-recipes" end t)))
+        (setq step (point) result t))
        ((looking-at "\\(\n\\)\\(\t\\)"); multiple recipes
         ;;(smart-mode-scan-trace-i (concat tag "#5.3") end t)
         (setq step (goto-char (match-end 1)))
         (smart-mode-scan-recipes nil end)
-        (setq step (point) result (<= end step))
-        (unless result
-          (smart-mode-scan-trace-o (concat tag "#5.3.1") "FAILED: scan-recipes" end t)))
+        (setq step (point) result t))
        ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(;\\)"); single recipe
         ;;(smart-mode-scan-trace-i (concat tag "#5.4") end t)
         (setq step (goto-char (match-beginning 1))); skip spaces
         (smart-mode-scan-recipes nil end)
-        (setq step (point) result (<= end step))
-        (unless result
-          (smart-mode-scan-trace-o (concat tag "#5.4.1") "FAILED: scan-recipes" end t)))); cond
+        (setq step (point) result t))); cond
       ;;
       ;; scan any unscanned recipes
       (while (and (not result) (<= step end)
@@ -2498,7 +2507,7 @@
     (smart-mode-scan-spaces end)
     ;;
     ;;(smart-mode-scan-trace-i (concat tag "#2") end t)
-    (when (looking-at "=>\\|[⇒→⇢]")
+    (when (looking-at smart-mode-selection-arrows); "=>\\|[⇒→⇢]"
       ;;(smart-mode-scan-trace-i (concat tag "#2.1") end t)
       (smart-match-property 0 0 'font-lock-face 'smart-mode-arrow-face)
       (setq step (goto-char (match-end 0)))
@@ -2782,6 +2791,7 @@
       ((pos) (str) (kind))
       (looking-at "[^\n]")
     ;;
+    ;;(smart-mode-scan-trace-i (concat tag "#0") end t)
     (smart-mode-scan-spaces end)
     ;;(smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
@@ -2798,29 +2808,38 @@
       (smart-match-property 1 1 'font-lock-face 'smart-mode-call-special-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
+     ;; User expressions: user->xxx +=
+     ((looking-at (concat "\\(user\\)" smart-mode-selection-arrows-capture smart-mode-bareword-regex))
+      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-call-special-face)
+      (cond
+       ((string-equal (match-string 2) "=>\\|⇒")
+        ;;(smart-mode-scan-trace-i (concat tag "#2.2.1") end t)
+        (smart-mode-warning-region (match-beginning 2) (match-end 2)
+                                   "unsupported selection: user%s%s"
+                                   (match-string 2) (buffer-substring (match-string 3))))
+       ((smart-match-property 2 2 'font-lock-face 'smart-mode-arrow-face)))
+      (smart-match-property 3 3 'font-lock-face 'smart-mode-call-var-name-face)
+      (setq step (goto-char (match-end 0)))
+      (smart-mode-scan-spaces end) ; spaces
+      (when (looking-at smart-mode-assign-regex)
+        ;;(smart-mode-scan-trace-i (concat tag "#2.2.2") end t)
+        (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
+        (setq step (goto-char (match-end 0)))
+        (smart-mode-scan-spaces end) ; spaces
+        (setq kind 'assign)))
+     ;;
      ;; Builtin commands
      ((looking-at smart-mode-builtins-regex)
-      ;;(smart-mode-scan-trace-i (concat tag "#2.2") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-call-builtin-face)
       (setq step (goto-char (match-end 0)) kind 'builtin))
      ;;
      ;; Unknown commands
      ((looking-at smart-mode-bareword-regex)
-      ;;(smart-mode-scan-trace-i (concat tag "#2.3") end t)
+      ;;(smart-mode-scan-trace-i (concat tag "#2.4") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-warning-face)
       (setq step (goto-char (match-end 0)) kind 'unknown))
-     ;;
-     ;; User expressions: user->xxx +=
-     ((looking-at (concat "\\(user\\)\\(?:" smart-mode-selection-arrows-capture "\\(\\(?:\\w\\|-\\|_\\)+\\)?\\s-*" smart-mode-assign-regex "?\\)?\\(\\s-*\\)"))
-      ;;(smart-mode-scan-trace-i (concat tag "#2.4") end t)
-      (smart-match-property 1 1 'font-lock-face 'font-lock-keyword-face)
-      (if (string-equal (match-string 2) "=>")
-          (smart-mode-warning-region (match-beginning 2) (match-end 2) "unsupported selection: user=>%s" (buffer-substring (match-string 3)))
-        (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face))
-      (smart-match-property 3 3 'font-lock-face 'font-lock-variable-name-face)
-      (smart-match-property 4 4 'font-lock-face 'smart-mode-constant-face)
-      (smart-mode-match-remove-face-goto 5)
-      (setq step (point) kind 'assign))
      ;;
      ;; Value expressions.
      ((and (setq pos (point)) (smart-mode-scan-expr end 'smart-mode-no-face))
