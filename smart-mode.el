@@ -3052,7 +3052,7 @@
       (smart-mode-scan-trace-i (concat tag "#1.6") end nil)
       (smart-mode-scan-cc-comment2 'c++ end)
       (setq step (if (< step (point)) (point) (1+ step))))
-     ((looking-at "[{},*]")
+     ((looking-at "[{},*+\\-]")
       (smart-mode-scan-trace-i (concat tag "#1.7") end nil)
       (smart-match-property 0 0 'font-lock-face 'smart-mode-c++-punc-face)
       (setq step (goto-char (match-end 0))))
