@@ -2523,7 +2523,8 @@
          (t
           (setq step (line-end-position))
           (smart-mode-scan-trace-i (concat tag "#1.1.3") end t)
-          (smart-mode-warning-region (point) step "bad files spec")))))
+          (smart-mode-warning-region (point) step "bad files spec")
+          (goto-char step)))))
      ((and (not (smart-mode-scan-expr end 'smart-mode-pseg-face))
            (< (point) end))
       (smart-mode-scan-trace-i (concat tag "#1.2") end t)
