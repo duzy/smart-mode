@@ -3045,15 +3045,15 @@
       (smart-mode-scan-trace-i (concat tag "#1.4") end nil)
       (smart-mode-scan-cc-string 'c++ end)
       (setq step (if (< step (point)) (point) (1+ step))))
-     ((looking-at "//")
+     ((looking-at "//") ; //
       (smart-mode-scan-trace-i (concat tag "#1.5") end nil)
       (smart-mode-scan-cc-comment1 'c++ (1+ end))
       (setq step (if (< step (point)) (point) (1+ step))))
-     ((looking-at "/\\*")
+     ((looking-at "/\\*") ; /*
       (smart-mode-scan-trace-i (concat tag "#1.6") end nil)
       (smart-mode-scan-cc-comment2 'c++ end)
       (setq step (if (< step (point)) (point) (1+ step))))
-     ((looking-at "[{},*+\\-]")
+     ((looking-at "[{},*+-]") ; {},*+-
       (smart-mode-scan-trace-i (concat tag "#1.7") end nil)
       (smart-match-property 0 0 'font-lock-face 'smart-mode-c++-punc-face)
       (setq step (goto-char (match-end 0))))
@@ -3140,6 +3140,11 @@
       (smart-match-property 1 1 'font-lock-face 'smart-mode-c++-type-face)
       (smart-match-property 2 2 'font-lock-face 'smart-mode-c++-function-name-face)
       (setq step (goto-char (match-beginning 3))))
+     ((looking-at "\\(\\\\\\)\\(.\\)") ; escape
+      (smart-mode-scan-trace-i (concat tag "#1.16") end nil)
+      (smart-match-property 1 1 'font-lock-face 'smart-mode-escape-slash-face)
+      (smart-match-property 2 2 'font-lock-face 'smart-mode-escape-slash-face) ;'smart-mode-c++-punc-face
+      (setq step (goto-char (match-end 0))))
      ((looking-at "\\([^ \t\n]+\\)")
       (smart-mode-scan-trace-i (concat tag "#1.x") end t)
       (smart-mode-warning-region (match-beginning 1) (match-end 1)
