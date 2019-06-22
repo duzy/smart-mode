@@ -74,7 +74,7 @@
 (defconst smart-mode-var-char-regex "[1-9@%<?^+|*~./_\\-]\\|\\.{1,2}"
   "Regex used to match special (single char) variable names.")
 (defconst smart-mode-var-name-regex ; smart-mode-bareword-regex
-  "[[:alpha:]_]\\(?:[[:alnum:]_+]\\|-[[:alnum:]]\\)*"
+  "[[:alpha:]_]\\(?:[[:alnum:]_+.]\\|-[[:alnum:]]\\)*"
   "Regex used to match calling (expanding) names.")
 (defconst smart-mode-call-char-regex
   (concat "\\([$&]\\)\\(" smart-mode-var-char-regex "\\)")
