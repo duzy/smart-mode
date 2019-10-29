@@ -307,7 +307,7 @@
   "Regex to match keywords understood by smart as statements.")
 
 (defconst smart-mode-builtin-names
-  `("print" "printl" "println" "plus" "minus" "string" "patsubst"
+  `("print" "printl" "println" "plus" "minus" "string" "patsubst" "subst"
     "filter" "filter-out" "encode-base64" "decode-base64" "base"
     "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
