@@ -119,11 +119,11 @@
   (concat "\\(\\-\\)" (regexp-opt smart-mode-project-options 'words))
   "Regex to match support project options.")
 
-(defconst smart-mode-import-options
+(defconst smart-mode-use-options
   `("cond" "reusing")
-  "List of supported import options.")
-(defconst smart-mode-import-option-regex
-  (concat "\\(\\-\\)" (regexp-opt smart-mode-import-options 'words))
+  "List of supported use options.")
+(defconst smart-mode-use-option-regex
+  (concat "\\(\\-\\)" (regexp-opt smart-mode-use-options 'words))
   "Regex to match support project options.")
 
 (defconst smart-mode-include-options
@@ -294,12 +294,12 @@
   "Regex to match bash dialect keywords.")
 
 (defconst smart-mode-statement-keywords
-  `("configs" "import" "use" "files" "extensions" "include"
+  `("configs" "use" "files" "extensions" "include"
     "eval" "export" "configuration")
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-environments
-  `("import" "use" "files" "extensions" "include"  "eval" "export" "configuration")
+  `("use" "files" "extensions" "include"  "eval" "export" "configuration")
   "List of environments.")
 
 (defconst smart-mode-statements-regex
@@ -313,7 +313,8 @@
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
     "truncate" "link" "symlink" "configure-file" "file"
     "wildcard" "read-dir" "read-file" "write-file"
-    "error" "warning" "or" "and" "value")
+    "error" "warning" "or" "and" "value" "unique"
+    "trim" "trim-space" "trim-left" "trim-right" "trim-prefix" "trim-suffix" "trim-ext")
   "List of names understood by smart as builtins.")
 (defconst smart-mode-builtins-regex
   (regexp-opt smart-mode-builtin-names 'words)
@@ -1046,9 +1047,9 @@
     ;;
     ;; continue with the last scan (semantic)
     (cond
-     ((string= sema 'spec-import)
+     ((string= sema 'spec-use)
       (smart-mode-scan-trace-o "#0.1" sema end nil)
-      (smart-mode-scan-specs (point) end "import" t))
+      (smart-mode-scan-specs (point) end "use" t)) ; "import"
      ((string= sema 'spec-files)
       (smart-mode-scan-trace-o "#0.2" sema end nil)
       (smart-mode-scan-specs (point) end "files" t))
@@ -2464,9 +2465,9 @@
       (if (looking-at ")")
           (setq step end result t))))); defun
 
-(defun smart-mode-scan-spec-import (end &optional continue)
-  (smart-mode-scan* spec-import () t;(looking-at "[^\n]")
-    ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:import\\)?\\(?:\\\\\n\\|[ \t]\\)*")
+(defun smart-mode-scan-spec-use (end &optional continue) ; spec-import
+  (smart-mode-scan* spec-use () t;(looking-at "[^\n]")
+    ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:use\\)?\\(?:\\\\\n\\|[ \t]\\)*")
     (smart-mode-scan-trace-i (concat tag "#0") end nil)
     ;;
     ;; spaces and continual lines
@@ -2486,7 +2487,7 @@
          (setq result (looking-at endrx))))); and
     (smart-mode-scan-trace-i (concat tag "#2") end nil)
     (unless result
-      (smart-mode-warning-region (point) (line-end-position) "unterminated import spec")
+      (smart-mode-warning-region (point) (line-end-position) "unterminated use spec")
       (setq step (goto-char (line-end-position)))))); defun
 
 (defun smart-mode-scan-spec-files (end &optional continue)
