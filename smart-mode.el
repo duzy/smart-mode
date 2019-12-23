@@ -312,7 +312,7 @@
     "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
     "truncate" "link" "symlink" "configure-file" "file"
-    "wildcard" "read-dir" "read-file" "write-file"
+    "wildcard" "read-dir" "read-file" "write-file" "touch-file"
     "error" "warning" "or" "and" "value" "unique"
     "trim" "trim-space" "trim-left" "trim-right" "trim-prefix" "trim-suffix" "trim-ext")
   "List of names understood by smart as builtins.")
@@ -4127,18 +4127,18 @@ Returns `t' if there's a next dependency line, or nil."
         (dialect (get-text-property (point) 'smart-dialect)))
     (unless
         (cond
-         ;; Killing a continual line (aka. ending with '\').
+         ;; Killing a continual line (ie. ending with '\').
          ((looking-at ".*\\\\$") ; ".*\\\\$\\s-*" ; #continual 
-          (message "kill-line: #continual semantic(%s) dialect(%s)" semantic dialect)
+          (message "kill-line#1: #continual semantic(%s) dialect(%s)" semantic dialect)
           (kill-region (match-beginning 0) (+ (match-end 0) 1))
           ;; Killing spaces preceding the next line
-          (when (looking-at "\\s-\\{2,\\}")
-            (kill-region (match-beginning 0) (1- (match-end 0))))
+          ;;(when (looking-at "\\s-\\{2,\\}")
+          ;;  (kill-region (match-beginning 0) (1- (match-end 0))))
           t)
 
-         ;; Killing the ending of a continual line (aka. right after '\')
+         ;; Killing the ending of a continual line (ie. right after '\')
          ((looking-back "\\\\$")
-          (message "kill-line: #continual-tail semantic(%s) dialect(%s)" semantic dialect)
+          (message "kill-line#2: #continual-tail semantic(%s) dialect(%s)" semantic dialect)
           (kill-region (match-beginning 0) (+ (match-end 0) 1))
           ;; Killing spaces preceding the next line
           (when (looking-at "\\s-\\{2,\\}")
@@ -4147,7 +4147,7 @@ Returns `t' if there's a next dependency line, or nil."
 
          ;; Killing a dialect recipe line.
          ((equal semantic 'recipe) ; #recipe
-          (message "kill-line: #recipe dialect(%s)" dialect)
+          (message "kill-line#3: #recipe dialect(%s)" dialect)
           (cond ((looking-at "$") (delete-char 2) t))))
       (message "kill-line: #general semantic(%s) dialect(%s)" semantic dialect)
       (kill-line))))
