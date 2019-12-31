@@ -1519,7 +1519,7 @@
     (smart-mode-scan-modifiers end)
     (setq step (point) result t)))
 
-(defun smart-mode-scan-modifiers (end &optional continue)
+(defun smart-mode-scan-modifiers (end &optional continue is-dependencies)
   (smart-mode-scan-trace-o "modifiers#a.0" continue end nil)
   (while (and (< end (point-max))
               (let ((sema (get-text-property end 'smart-semantic)))
@@ -1565,7 +1565,8 @@
     (smart-mode-scan-spaces end t)
     ;;
     ;; scan dependencies and recipes
-    (smart-mode-scan-dependencies end)
+    (unless is-dependencies
+      (smart-mode-scan-dependencies end))
     (smart-mode-scan-trace-i (concat tag "#2") end nil)
     (setq step (point) result t)))
 
@@ -1952,6 +1953,9 @@
      ;;  (smart-mode-scan-trace-i (concat tag "#4") end nil)
      ;;  (smart-mode-warning-region (match-beginning 1) (match-end 2) "bad escape (list): %s" (match-string 2))
      ;;  (setq step (goto-char (match-end 0))))
+     ((looking-at "\\(?:\\\\\n\\|[ \t]\\)*\\(\\[\\)"); \\[
+      (smart-mode-scan-modifiers end nil t)
+      (setq step (point)))
      ((smart-mode-scan-expr end suggested-face)
       (smart-mode-scan-trace-i (concat tag "#5") end nil)
       (setq step (point))))
@@ -2782,11 +2786,12 @@
       (cond
        ;; semi recipe (single)
        (semi (cond
-              ((or (looking-back "\\]\\(?:\\\\\n\\|[ \t]\\)*")
-                   (looking-back ":[^;\n]")
-                   ;; continual lines between ']:' and ';'
-                   (looking-back "\\(?:\\]\\|:\\)\\(?:[^\\]*\\\\\n\\)+\\(?:\\\\\n\\|[ \t]\\)*"))
-               (looking-at ";"))
+              ;; ((or (looking-back "\\]\\(?:\\\\\n\\|[ \t]\\)*")
+              ;;      (looking-back ":[^;\n]") ; //":[^;\n]"
+              ;;      ;; continual lines between ']:' and ';'
+              ;;      (looking-back "\\(?:\\]\\|:\\)\\(?:[^\\]*\\\\\n\\)+\\(?:\\\\\n\\|[ \t]\\)*"))
+              ;;  (looking-at ";"))
+              ((looking-at ";"))
               ((smart-mode-scan-trace-o (concat tag "#0.1") dialect end t)
                nil)))
        ;; tabby recipe (list)
