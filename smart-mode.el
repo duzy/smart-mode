@@ -185,12 +185,12 @@
 
 (defconst smart-mode-modifier-names
   `("unclose" "cd" "env" "var" "set" "eval" "value"
-    "compare" "stdout" "stderr" "stdin" "sudo"
+    "stdout" "stderr" "stdin" "sudo" "grep" "path"
     "update-file" "copy-file" "write-file"
     "check" "check-file" "check-dir" 
-    "configure" "configure-file" "extract-configuration"
+    "configure" "configure-file"
     "grep-compare" "grep-files" "grep-dependencies"
-    "parallel" ;;"plain" "dock"
+    ;;"plain" "dock"
     ,@smart-mode-special-modifier-names)
   "List of names understood by smart as modifiers.")
 (defconst smart-mode-modifiers-regex
