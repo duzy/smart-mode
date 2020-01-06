@@ -184,7 +184,7 @@
   "Regex to match valid modifiers.")
 
 (defconst smart-mode-modifier-names
-  `("unclose" "cd" "env" "var" "set" "eval" "value"
+  `("unclose" "cd" "closure" "env" "var" "set" "eval" "value"
     "stdout" "stderr" "stdin" "sudo" "grep" "path"
     "update-file" "copy-file" "write-file"
     "check" "check-file" "check-dir" 
