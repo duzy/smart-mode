@@ -177,7 +177,7 @@
 
 
 (defconst smart-mode-special-modifier-names
-  `("assert" "case" "cond" "closure")
+  `("assert" "case" "cond" "closure" "wait")
   "List of names understood by smart as modifiers.")
 (defconst smart-mode-special-modifiers-regex
   (regexp-opt smart-mode-special-modifier-names 'words)
