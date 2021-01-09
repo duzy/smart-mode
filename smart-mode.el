@@ -155,7 +155,7 @@
   "Regex to match support project options.")
 
 (defconst smart-mode-special-var-names ; $:xxx:
-  `("os" "goals" "usee" "self")
+  `("os" "goals" "usee" "self" "mode")
   "List of special variable names.")
 (defconst smart-mode-special-var-names-regex
   (regexp-opt smart-mode-special-var-names 'words)
@@ -185,10 +185,10 @@
 
 (defconst smart-mode-modifier-names
   `("unclose" "cd" "closure" "env" "var" "set" "eval" "value"
-    "stdout" "stderr" "stdin" "sudo" "grep" "path"
+    "stdout" "stderr" "stdin" "sudo" "grep" "path" "mkdir"
     "update-file" "copy-file" "write-file" "read-file"
-    "check" "check-file" "check-dir" 
-    "configure" "configure-file"
+    "check" "check-file" "check-dir" "touch" "print"
+    "configure" "configure-file" "once"
     "grep-compare" "grep-files" "grep-dependencies"
     ;;"plain" "dock"
     ,@smart-mode-special-modifier-names)
@@ -287,7 +287,7 @@
   "Regex to match c++ dialect identifiers.")
 
 (defconst smart-mode-dockerfile-keywords
-  '("FROM" "MAINTAINER" "ENV" "RUN" "USER" "COPY" "WORKDIR" "CMD")
+  '("FROM" "MAINTAINER" "ENV" "EXPOSE" "RUN" "USER" "COPY" "WORKDIR" "CMD")
   "Bash dialect keywords.")
 (defconst smart-mode-dockerfile-keywords-regex
   (regexp-opt smart-mode-dockerfile-keywords 'words)
@@ -308,12 +308,12 @@
 
 (defconst smart-mode-builtin-names
   `("print" "printl" "println" "plus" "minus" "string" "patsubst" "subst"
-    "filter" "filter-out" "encode-base64" "decode-base64" "base"
+    "filter" "filter-out" "encode-base64" "decode-base64" "base" "substring"
     "dir" "dir2" "dir3" "dir4" "dir5" "dir6" "dir7" "dir8" "dir9" "dirs"
     "mkdir" "mkdir-all" "chdir" "rename" "remove" "remove-all"
-    "truncate" "link" "symlink" "configure-file" "file"
+    "truncate" "link" "symlink" "configure-file" "file" "install"
     "wildcard" "read-dir" "read-file" "write-file" "touch-file"
-    "error" "warning" "or" "and" "value" "unique"
+    "error" "warning" "or" "and" "value" "unique" "append"
     "trim" "trim-space" "trim-left" "trim-right" "trim-prefix" "trim-suffix" "trim-ext")
   "List of names understood by smart as builtins.")
 (defconst smart-mode-builtins-regex
@@ -2581,43 +2581,47 @@
 (defun smart-mode-scan-spec-configuration (end &optional continue)
   (smart-mode-scan* spec-configuration ((begin step)) t;(looking-at "[^\n]")
     ;;(looking-back "^\\(?:\\\\\n\\|[ \t]\\)*\\(?:configuration\\)?\\(?:\\\\\n\\|[ \t]\\)*")
-    (smart-mode-scan-trace-i (concat tag "#0") end nil)
+    (smart-mode-scan-trace-i (concat tag "#0") end t)
     ;;
     ;; spaces and continual lines
     (smart-mode-scan-spaces end nil continue)
     (smart-mode-scan-expr end 'smart-mode-no-face)
     (smart-mode-scan-spaces end)
     ;;
-    (smart-mode-scan-trace-i (concat tag "#1") end nil)
+    (smart-mode-scan-trace-i (concat tag "#1") end t)
     (cond
      ((looking-at smart-mode-assign-regex)
-      (smart-mode-scan-trace-i (concat tag "#1.1") end nil)
+      (smart-mode-scan-trace-i (concat tag "#1.1") end t)
       (smart-match-property 1 1 'font-lock-face 'smart-mode-assign-face)
       (setq step (goto-char (match-end 0)))
       (smart-mode-scan-list end 'smart-mode-no-face)
       (smart-mode-scan-spaces end nil continue); spaces or newlines
-      (smart-mode-scan-trace-i (concat tag "#1.1.1") end nil)
+      (smart-mode-scan-trace-i (concat tag "#1.1.1") end t)
       (setq step end result t))
+     ;; ((looking-at "#")
+     ;;  (smart-mode-scan-trace-i (concat tag "#1.2") end t)
+     ;;  (smart-mode-scan-comment end)
+     ;;  (setq step (point)))
      (t
-      (smart-mode-scan-trace-i (concat tag "#1.2") end t)
+      (smart-mode-scan-trace-i (concat tag "#1.3") end t)
       (smart-mode-warning-region (match-beginning 1) end "configuration spec error#2")
       (setq step (goto-char (line-end-position)))))
     ;;
-    (smart-mode-scan-trace-i (concat tag "#3") end nil)
+    (smart-mode-scan-trace-i (concat tag "#2") end t)
     (cond
      (result
-      (smart-mode-scan-trace-i (concat tag "#3.1") end nil)
+      (smart-mode-scan-trace-i (concat tag "#2.1") end t)
       (when continue
-        (smart-mode-scan-trace-i (concat tag "#3.1.1") end nil)
+        (smart-mode-scan-trace-i (concat tag "#2.1.1") end t)
         (smart-mode-scan-spaces end nil t); spaces and newlines
         (smart-text-property begin (point) 'smart-semantic 'spec-configuration)
         (when (looking-at ")")
-          (smart-mode-scan-trace-i (concat tag "#3.1.1.1") end nil)
+          (smart-mode-scan-trace-i (concat tag "#2.1.1.1") end t)
           (smart-match-property 0 0 'font-lock-face 'smart-mode-paren-face)
           (smart-match-property 0 0 'smart-semantic 'configuration)
           (setq step (goto-char (match-end 0))))))
      (t
-      (smart-mode-scan-trace-i (concat tag "#3.2") end t)
+      (smart-mode-scan-trace-i (concat tag "#2.2") end t)
       (smart-mode-warning-region (point) (line-end-position) "unterminated configuration spec")
       (setq step (goto-char (line-end-position))))))); defun
 
@@ -4492,7 +4496,9 @@ Returns `t' if there's a next dependency line, or nil."
         (fmt))
     (setq mode-line-format
           (list
-           "%e" mode-line-front-space
+           "%e"
+           (:eval (spaceline-ml-main))
+           mode-line-front-space
            mode-line-buffer-identification ":%l:%c "
            (format "(%s)│ " (point))
            (cond
