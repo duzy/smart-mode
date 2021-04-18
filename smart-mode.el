@@ -42,7 +42,7 @@
 
 (defconst smart-mode-space-regex
   "\\(?:[ \t]\\|\\\\\n\\)"
-  "Regex to match a space (or continual line)")
+  "Regex to match a space (or continual line).")
 
 (defconst smart-mode-url-schemes
   `("file" "http" "https" "ws" "wss" "ftp" "sftp" "mailto")
