@@ -295,7 +295,7 @@
 
 (defconst smart-mode-statement-keywords
   `("configs" "use" "files" "extensions" "include"
-    "eval" "export" "configuration")
+    "eval" "export" "template")
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-environments
