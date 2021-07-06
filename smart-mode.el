@@ -299,7 +299,7 @@
   "List of keywords understood by smart as statements.")
 
 (defconst smart-mode-environments
-  `("use" "files" "extensions" "include"  "eval" "export" "configuration")
+  `("use" "files" "extensions" "include"  "eval" "export")
   "List of environments.")
 
 (defconst smart-mode-statements-regex
