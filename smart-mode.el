@@ -188,7 +188,7 @@
     "stdout" "stderr" "stdin" "sudo" "grep" "path" "mkdir"
     "update-file" "copy-file" "write-file" "read-file"
     "check" "check-file" "check-dir" "touch" "print"
-    "configure" "configure-file" "once"
+    "configure" "configure-file" "once" "stamp"
     "grep-compare" "grep-files" "grep-dependencies"
     ;;"plain" "dock"
     ,@smart-mode-special-modifier-names)
